@@ -4,7 +4,7 @@
    Bump CACHE_VERSION when deploying updates.
    ═══════════════════════════════════════════ */
 
-const CACHE_VERSION = 'v1';
+const CACHE_VERSION = 'v2';
 const CACHE_NAME    = `pppd-tracker-${CACHE_VERSION}`;
 
 /* All files that must be available offline.

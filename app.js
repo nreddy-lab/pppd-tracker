@@ -1,7 +1,7 @@
 /* ═══════════════════════════════════════════
    PPPD Tracker — app.js
-   All logic: storage, navigation, log form,
-   history, insights, charts, export.
+   Multi-episode logging model.
+   Storage key: pppd_entries
    Vanilla JS, no dependencies.
    ═══════════════════════════════════════════ */
 
@@ -10,7 +10,7 @@
 // ─────────────────────────────────────────────
 // Constants
 // ─────────────────────────────────────────────
-const STORAGE_KEY = 'pppd_logs';
+const STORAGE_KEY = 'pppd_entries';
 
 const TRIGGER_LABELS = {
   screens:  '📱 Screens',
@@ -20,6 +20,21 @@ const TRIGGER_LABELS = {
   stress:   '😰 Stress',
   noise:    '🔊 Noise',
   light:    '💡 Bright Light',
+  other:    '➕ Other',
+};
+
+const ACTIVITY_LABELS = {
+  computer: '💻 Computer',
+  reading:  '📖 Reading',
+  walking:  '🚶 Walking',
+  shopping: '🛒 Shopping',
+  driving:  '🚗 Driving',
+  tv:       '📺 TV',
+  cooking:  '🍳 Cooking',
+  resting:  '🛋️ Resting',
+  phone:    '📱 Phone',
+  outside:  '🌳 Outside',
+  exercise: '🏃 Exercise',
   other:    '➕ Other',
 };
 
@@ -34,18 +49,21 @@ const VIEW_TITLES = {
 // App State
 // ─────────────────────────────────────────────
 const state = {
-  currentView:      'log',
-  calMonth:         new Date().getMonth(),
-  calYear:          new Date().getFullYear(),
-  chartDays:        14,
-  sleepQuality:     3,
-  selectedTriggers: new Set(),
+  currentView:        'log',
+  calMonth:           new Date().getMonth(),
+  calYear:            new Date().getFullYear(),
+  chartDays:          14,
+  selectedActivity:   null,
+  selectedEpTriggers: new Set(),
+  sleepType:          'night',
+  slQuality:          3,
+  activeSheet:        null,
 };
 
 // ─────────────────────────────────────────────
 // Storage helpers
 // ─────────────────────────────────────────────
-function getLogs() {
+function getEntries() {
   try {
     return JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
   } catch {
@@ -53,36 +71,62 @@ function getLogs() {
   }
 }
 
-function saveLogs(logs) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(logs));
+function saveEntries(entries) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
 }
 
-function getLog(iso) {
-  return getLogs().find(l => l.date === iso) || null;
+function addEntry(entry) {
+  const entries = getEntries();
+  entries.push(entry);
+  entries.sort((a, b) => a.timestamp - b.timestamp);
+  saveEntries(entries);
 }
 
-function upsertLog(entry) {
-  const logs = getLogs();
-  const idx  = logs.findIndex(l => l.date === entry.date);
-  if (idx >= 0) logs[idx] = entry;
-  else          logs.push(entry);
-  logs.sort((a, b) => a.date.localeCompare(b.date));
-  saveLogs(logs);
+function deleteEntry(id) {
+  saveEntries(getEntries().filter(e => e.id !== id));
 }
 
-function getLogsInRange(days) {
-  const all = getLogs();
+function getEntriesInRange(days) {
+  const all = getEntries();
   if (days === 0) return all;
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - days);
-  const cutoffISO = localISO(cutoff);
-  return all.filter(l => l.date >= cutoffISO);
+  return all.filter(e => e.date >= localISO(cutoff));
 }
 
-function getThisMonthLogs() {
+function getDayEntries(iso) {
+  return getEntries().filter(e => e.date === iso);
+}
+
+function getDayDizzyEntries(iso) {
+  return getDayEntries(iso).filter(e => e.type === 'dizziness');
+}
+
+function getDaySleepEntries(iso) {
+  return getDayEntries(iso).filter(e => e.type === 'sleep');
+}
+
+function getDayStats(iso) {
+  const dizzy = getDayDizzyEntries(iso);
+  const sleep = getDaySleepEntries(iso);
+  const intensities = dizzy.map(e => e.intensity);
+  const totalSleep  = sleep.reduce((s, e) => s + (e.hours || 0), 0);
+  const nightSleep  = sleep.filter(e => e.sleepType === 'night').reduce((s, e) => s + (e.hours || 0), 0);
+  const napSleep    = sleep.filter(e => e.sleepType === 'nap').reduce((s, e) => s + (e.hours || 0), 0);
+  return {
+    episodeCount: dizzy.length,
+    avgIntensity: intensities.length ? r1(mean(intensities)) : null,
+    maxIntensity: intensities.length ? Math.max(...intensities) : null,
+    totalSleep,
+    nightSleep,
+    napSleep,
+  };
+}
+
+function getThisMonthEntries() {
   const now    = new Date();
   const prefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  return getLogs().filter(l => l.date.startsWith(prefix));
+  return getEntries().filter(e => e.date.startsWith(prefix));
 }
 
 // ─────────────────────────────────────────────
@@ -115,6 +159,15 @@ function formatLong(d) {
 
 function formatShort(iso) {
   return isoToDate(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+}
+
+function nowTimeString() {
+  const now = new Date();
+  return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+}
+
+function genId(prefix) {
+  return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
 }
 
 // ─────────────────────────────────────────────
@@ -162,7 +215,6 @@ function switchView(name) {
 
   document.getElementById('header-title').textContent = VIEW_TITLES[name] || 'PPPD Tracker';
 
-  // Lazy-render on first visit and re-render on return
   if (name === 'history')  renderHistory();
   if (name === 'insights') renderInsights();
   if (name === 'export')   renderExportStats();
@@ -176,116 +228,265 @@ function initHeader() {
 }
 
 // ─────────────────────────────────────────────
-// Daily Log — form
+// Daily Log — main view
 // ─────────────────────────────────────────────
 function initLog() {
-  // ── Dizziness slider
-  const dizSlider = document.getElementById('dizziness-slider');
-  const dizBadge  = document.getElementById('dizziness-value');
-  dizSlider.addEventListener('input', () => {
-    const v = +dizSlider.value;
-    dizBadge.textContent       = v;
-    dizBadge.style.background  = dizColor(v);
-  });
-  dizBadge.style.background = dizColor(+dizSlider.value);
+  document.getElementById('btn-log-dizziness').addEventListener('click', () => openSheet('sheet-dizziness'));
+  document.getElementById('btn-log-sleep').addEventListener('click', () => openSheet('sheet-sleep'));
+  renderTodaySummary();
+  renderTimeline();
+}
 
-  // ── Stress slider
-  const stressSlider = document.getElementById('stress-slider');
-  const stressBadge  = document.getElementById('stress-value');
+function renderTodaySummary() {
+  const stats = getDayStats(todayISO());
+  document.getElementById('summary-episodes').textContent = stats.episodeCount;
+
+  if (stats.avgIntensity !== null) {
+    document.getElementById('summary-avg-max').textContent = `${stats.avgIntensity} · ${stats.maxIntensity}`;
+  } else {
+    document.getElementById('summary-avg-max').textContent = '—';
+  }
+
+  if (stats.totalSleep > 0) {
+    document.getElementById('summary-sleep').textContent = `${r1(stats.totalSleep)}h`;
+  } else {
+    document.getElementById('summary-sleep').textContent = '—';
+  }
+}
+
+function renderTimeline() {
+  // newest first within the day
+  const entries   = getDayEntries(todayISO()).slice().reverse();
+  const container = document.getElementById('today-timeline');
+
+  if (!entries.length) {
+    container.innerHTML = '<p class="empty-state">No entries yet today. Tap a button above to log.</p>';
+    return;
+  }
+
+  container.innerHTML = entries.map(e => {
+    if (e.type === 'dizziness') {
+      const actLabel   = e.activity ? (ACTIVITY_LABELS[e.activity] || e.activity) : '';
+      const triggersHtml = e.triggers?.length
+        ? `<div class="entry-triggers">${e.triggers.map(t => TRIGGER_LABELS[t] || t).join(' · ')}</div>`
+        : '';
+      return `
+        <div class="timeline-entry">
+          <span class="entry-icon">💫</span>
+          <div class="entry-body">
+            <div class="entry-main">Dizziness ${e.intensity}/10${actLabel ? ' · ' + actLabel : ''}</div>
+            ${triggersHtml}
+          </div>
+          <div class="entry-meta">
+            <span class="entry-time">${e.time}</span>
+            <button class="entry-delete" data-id="${e.id}" type="button" aria-label="Delete entry">✕</button>
+          </div>
+        </div>`;
+    } else {
+      const typeLabel = e.sleepType === 'night' ? 'Night sleep' : 'Nap';
+      const stars     = e.quality ? '★'.repeat(e.quality) + '☆'.repeat(5 - e.quality) : '';
+      return `
+        <div class="timeline-entry">
+          <span class="entry-icon">${e.sleepType === 'night' ? '🌙' : '😴'}</span>
+          <div class="entry-body">
+            <div class="entry-main">${typeLabel} · ${e.hours}h${stars ? ' · ' + stars : ''}</div>
+          </div>
+          <div class="entry-meta">
+            <span class="entry-time">${e.time || ''}</span>
+            <button class="entry-delete" data-id="${e.id}" type="button" aria-label="Delete entry">✕</button>
+          </div>
+        </div>`;
+    }
+  }).join('');
+
+  container.querySelectorAll('.entry-delete').forEach(btn => {
+    btn.addEventListener('click', () => {
+      deleteEntry(btn.dataset.id);
+      renderTimeline();
+      renderTodaySummary();
+    });
+  });
+}
+
+// ─────────────────────────────────────────────
+// Form sheets — open / close
+// ─────────────────────────────────────────────
+function openSheet(id) {
+  state.activeSheet = id;
+  document.getElementById('sheet-overlay').classList.remove('hidden');
+  document.getElementById(id).classList.remove('hidden');
+
+  if (id === 'sheet-dizziness') resetDizzySheet();
+  if (id === 'sheet-sleep')     resetSleepSheet();
+}
+
+function closeSheet() {
+  if (state.activeSheet) {
+    document.getElementById(state.activeSheet).classList.add('hidden');
+    state.activeSheet = null;
+  }
+  document.getElementById('sheet-overlay').classList.add('hidden');
+}
+
+function resetDizzySheet() {
+  document.getElementById('ep-time').value              = nowTimeString();
+  document.getElementById('ep-intensity').value         = 5;
+  document.getElementById('ep-intensity-badge').textContent   = 5;
+  document.getElementById('ep-intensity-badge').style.background = dizColor(5);
+  document.getElementById('ep-stress').value            = 5;
+  document.getElementById('ep-stress-badge').textContent      = 5;
+  document.getElementById('ep-notes').value             = '';
+  document.getElementById('ep-activity-detail').value   = '';
+  document.getElementById('activity-detail-wrap').style.display = 'none';
+  document.querySelectorAll('#activity-chips .chip').forEach(c => c.classList.remove('selected'));
+  document.querySelectorAll('#ep-triggers-grid .chip').forEach(c => c.classList.remove('selected'));
+  state.selectedActivity   = null;
+  state.selectedEpTriggers = new Set();
+}
+
+function resetSleepSheet() {
+  document.getElementById('sl-hours').value = 7;
+  document.getElementById('sl-notes').value = '';
+  state.sleepType = 'night';
+  state.slQuality = 3;
+  document.querySelectorAll('.sleep-type-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.type === 'night');
+  });
+  renderSlStars();
+}
+
+// ─────────────────────────────────────────────
+// Dizziness sheet — wiring
+// ─────────────────────────────────────────────
+function initDizzySheet() {
+  // Intensity slider
+  const intensitySlider = document.getElementById('ep-intensity');
+  const intensityBadge  = document.getElementById('ep-intensity-badge');
+  intensitySlider.addEventListener('input', () => {
+    const v = +intensitySlider.value;
+    intensityBadge.textContent       = v;
+    intensityBadge.style.background  = dizColor(v);
+  });
+
+  // Stress slider
+  const stressSlider = document.getElementById('ep-stress');
+  const stressBadge  = document.getElementById('ep-stress-badge');
   stressSlider.addEventListener('input', () => {
     stressBadge.textContent = stressSlider.value;
   });
 
-  // ── Trigger chips
-  document.querySelectorAll('.chip').forEach(chip => {
+  // Activity chips (single-select)
+  document.querySelectorAll('#activity-chips .chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      const act = chip.dataset.activity;
+      if (state.selectedActivity === act) {
+        // Deselect
+        chip.classList.remove('selected');
+        state.selectedActivity = null;
+        document.getElementById('activity-detail-wrap').style.display = 'none';
+      } else {
+        document.querySelectorAll('#activity-chips .chip').forEach(c => c.classList.remove('selected'));
+        chip.classList.add('selected');
+        state.selectedActivity = act;
+        document.getElementById('activity-detail-wrap').style.display = '';
+      }
+    });
+  });
+
+  // Trigger chips (multi-select)
+  document.querySelectorAll('#ep-triggers-grid .chip').forEach(chip => {
     chip.addEventListener('click', () => {
       const t = chip.dataset.trigger;
-      if (state.selectedTriggers.has(t)) {
-        state.selectedTriggers.delete(t);
+      if (state.selectedEpTriggers.has(t)) {
+        state.selectedEpTriggers.delete(t);
         chip.classList.remove('selected');
       } else {
-        state.selectedTriggers.add(t);
+        state.selectedEpTriggers.add(t);
         chip.classList.add('selected');
       }
     });
   });
 
-  // ── Sleep quality stars
-  document.querySelectorAll('.star').forEach(btn => {
-    btn.addEventListener('click', () => {
-      state.sleepQuality = +btn.dataset.value;
-      renderStars();
-    });
-  });
-  renderStars();
-
-  // ── Save / Update
-  document.getElementById('save-btn').addEventListener('click', saveLog);
-
-  // Pre-fill if today already logged
-  prefillToday();
+  document.getElementById('ep-save').addEventListener('click', saveDizzyEntry);
+  document.getElementById('ep-cancel').addEventListener('click', closeSheet);
 }
 
-function renderStars() {
-  document.querySelectorAll('.star').forEach(s => {
-    s.classList.toggle('lit', +s.dataset.value <= state.sleepQuality);
-  });
-}
-
-function prefillToday() {
-  const log = getLog(todayISO());
-  if (!log) return;
-
-  const dizSlider = document.getElementById('dizziness-slider');
-  const dizBadge  = document.getElementById('dizziness-value');
-  dizSlider.value            = log.dizziness;
-  dizBadge.textContent       = log.dizziness;
-  dizBadge.style.background  = dizColor(log.dizziness);
-
-  state.selectedTriggers = new Set(log.triggers || []);
-  document.querySelectorAll('.chip').forEach(chip => {
-    chip.classList.toggle('selected', state.selectedTriggers.has(chip.dataset.trigger));
-  });
-
-  document.getElementById('sleep-hours').value     = log.sleepHours ?? 7;
-  state.sleepQuality                               = log.sleepQuality ?? 3;
-  renderStars();
-
-  const stressSlider = document.getElementById('stress-slider');
-  stressSlider.value                               = log.stress ?? 5;
-  document.getElementById('stress-value').textContent = log.stress ?? 5;
-
-  document.getElementById('notes-input').value = log.notes || '';
-  document.getElementById('save-btn').textContent = "Update Today's Log";
-  showFeedback("Today's log loaded — you can edit and update it.", false);
-}
-
-function saveLog() {
+function saveDizzyEntry() {
+  const timeVal = document.getElementById('ep-time').value || nowTimeString();
   const entry = {
-    date:         todayISO(),
-    dizziness:    +document.getElementById('dizziness-slider').value,
-    triggers:     [...state.selectedTriggers],
-    sleepHours:   +document.getElementById('sleep-hours').value,
-    sleepQuality: state.sleepQuality,
-    stress:       +document.getElementById('stress-slider').value,
-    notes:        document.getElementById('notes-input').value.trim(),
-    timestamp:    Date.now(),
+    id:             genId('ep'),
+    type:           'dizziness',
+    date:           todayISO(),
+    timestamp:      Date.now(),
+    time:           timeVal,
+    intensity:      +document.getElementById('ep-intensity').value,
+    activity:       state.selectedActivity || '',
+    activityDetail: document.getElementById('ep-activity-detail').value.trim(),
+    triggers:       [...state.selectedEpTriggers],
+    stress:         +document.getElementById('ep-stress').value,
+    notes:          document.getElementById('ep-notes').value.trim(),
   };
 
-  upsertLog(entry);
-  document.getElementById('save-btn').textContent = "Update Today's Log";
-  showFeedback('✓ Saved!', true);
-}
-
-function showFeedback(msg, success) {
-  const el = document.getElementById('save-feedback');
-  el.textContent  = msg;
-  el.style.color  = success ? 'var(--clr-accent)' : 'var(--clr-text-muted)';
-  if (success) setTimeout(() => { el.textContent = ''; }, 3000);
+  addEntry(entry);
+  closeSheet();
+  renderTimeline();
+  renderTodaySummary();
 }
 
 // ─────────────────────────────────────────────
-// History — calendar
+// Sleep sheet — wiring
+// ─────────────────────────────────────────────
+function initSleepSheet() {
+  // Sleep type toggle
+  document.querySelectorAll('.sleep-type-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.sleepType = btn.dataset.type;
+      document.querySelectorAll('.sleep-type-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.type === state.sleepType);
+      });
+    });
+  });
+
+  // Quality stars
+  document.querySelectorAll('#sl-quality .star').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.slQuality = +btn.dataset.value;
+      renderSlStars();
+    });
+  });
+  renderSlStars();
+
+  document.getElementById('sl-save').addEventListener('click', saveSleepEntry);
+  document.getElementById('sl-cancel').addEventListener('click', closeSheet);
+}
+
+function renderSlStars() {
+  document.querySelectorAll('#sl-quality .star').forEach(s => {
+    s.classList.toggle('lit', +s.dataset.value <= state.slQuality);
+  });
+}
+
+function saveSleepEntry() {
+  const entry = {
+    id:        genId('sl'),
+    type:      'sleep',
+    date:      todayISO(),
+    timestamp: Date.now(),
+    time:      nowTimeString(),
+    sleepType: state.sleepType,
+    hours:     +document.getElementById('sl-hours').value,
+    quality:   state.slQuality,
+    notes:     document.getElementById('sl-notes').value.trim(),
+  };
+
+  addEntry(entry);
+  closeSheet();
+  renderTimeline();
+  renderTodaySummary();
+}
+
+// ─────────────────────────────────────────────
+// History
 // ─────────────────────────────────────────────
 function renderHistory() {
   renderCalendar();
@@ -308,8 +509,14 @@ function initCalNav() {
 
 function renderCalendar() {
   const { calYear, calMonth } = state;
-  const logMap  = {};
-  getLogs().forEach(l => { logMap[l.date] = l; });
+
+  // Build per-day stats map
+  const dayMap = {};
+  getEntries().forEach(e => {
+    if (!dayMap[e.date]) dayMap[e.date] = { dizzy: [], hasSleep: false };
+    if (e.type === 'dizziness') dayMap[e.date].dizzy.push(e.intensity);
+    if (e.type === 'sleep')     dayMap[e.date].hasSleep = true;
+  });
 
   const monthLabel = new Date(calYear, calMonth, 1)
     .toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
@@ -318,7 +525,6 @@ function renderCalendar() {
   const grid = document.getElementById('calendar-grid');
   grid.innerHTML = '';
 
-  // Day-of-week headers (Mon-first)
   ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].forEach(label => {
     const el = document.createElement('div');
     el.className   = 'cal-day-header';
@@ -326,9 +532,8 @@ function renderCalendar() {
     grid.appendChild(el);
   });
 
-  // Leading empty cells so day 1 lands on the right column
-  const firstDOW   = new Date(calYear, calMonth, 1).getDay(); // 0=Sun
-  const offset     = (firstDOW + 6) % 7;                      // 0=Mon
+  const firstDOW   = new Date(calYear, calMonth, 1).getDay();
+  const offset     = (firstDOW + 6) % 7;
   const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
   const today       = todayISO();
 
@@ -339,17 +544,21 @@ function renderCalendar() {
   }
 
   for (let day = 1; day <= daysInMonth; day++) {
-    const iso = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    const log = logMap[iso];
-    const el  = document.createElement('div');
+    const iso     = `${calYear}-${String(calMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const data    = dayMap[iso];
+    const el      = document.createElement('div');
 
     el.className   = 'cal-day';
     el.textContent = day;
     if (iso === today) el.classList.add('today');
 
-    if (log) {
-      el.classList.add('has-log', dizClass(log.dizziness));
-      el.title = `Dizziness: ${log.dizziness}${log.triggers?.length ? ' · ' + log.triggers.map(t => TRIGGER_LABELS[t] || t).join(', ') : ''}`;
+    if (data && data.dizzy.length > 0) {
+      const maxI = Math.max(...data.dizzy);
+      el.classList.add('has-log', dizClass(maxI));
+      el.title = `${data.dizzy.length} episode(s) · max intensity ${maxI}`;
+    } else if (data && data.hasSleep) {
+      el.classList.add('no-log');
+      el.title = 'Sleep logged';
     } else {
       el.classList.add('no-log');
     }
@@ -364,39 +573,59 @@ function renderCalendar() {
 function renderWeeklySummary() {
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - 6);
-  const logs = getLogs().filter(l => l.date >= localISO(cutoff));
-  const el   = document.getElementById('weekly-summary');
+  const cutoffISO = localISO(cutoff);
 
-  if (!logs.length) {
-    el.innerHTML = '<p class="empty-state">No logs in the last 7 days.</p>';
+  const weekEntries = getEntries().filter(e => e.date >= cutoffISO);
+  const el          = document.getElementById('weekly-summary');
+
+  if (!weekEntries.length) {
+    el.innerHTML = '<p class="empty-state">No entries in the last 7 days.</p>';
     return;
   }
 
-  const avgDiz    = r1(mean(logs.map(l => l.dizziness)));
-  const avgSleep  = r1(mean(logs.map(l => l.sleepHours)));
-  const avgStress = r1(mean(logs.map(l => l.stress)));
+  const dizzyEps = weekEntries.filter(e => e.type === 'dizziness');
+  const sleepEps = weekEntries.filter(e => e.type === 'sleep');
 
+  // Episodes per day
+  const daysWithEps = new Set(dizzyEps.map(e => e.date)).size;
+  const epsPerDay   = daysWithEps ? r1(dizzyEps.length / 7) : 0;
+
+  const avgDiz    = dizzyEps.length ? r1(mean(dizzyEps.map(e => e.intensity))) : '—';
+  const avgStress = dizzyEps.length ? r1(mean(dizzyEps.map(e => e.stress))) : '—';
+
+  const nightH = r1(sleepEps.filter(e => e.sleepType === 'night').reduce((s, e) => s + (e.hours || 0), 0) / 7);
+  const napH   = r1(sleepEps.filter(e => e.sleepType === 'nap').reduce((s, e) => s + (e.hours || 0), 0) / 7);
+
+  // Top trigger
   const trigCount = {};
-  logs.forEach(l => (l.triggers || []).forEach(t => { trigCount[t] = (trigCount[t] || 0) + 1; }));
+  dizzyEps.forEach(e => (e.triggers || []).forEach(t => { trigCount[t] = (trigCount[t] || 0) + 1; }));
   const topTrigEntry = Object.entries(trigCount).sort((a, b) => b[1] - a[1])[0];
-  const topTrig      = topTrigEntry ? TRIGGER_LABELS[topTrigEntry[0]] || topTrigEntry[0] : '—';
+  const topTrig      = topTrigEntry ? (TRIGGER_LABELS[topTrigEntry[0]] || topTrigEntry[0]) : '—';
 
   el.innerHTML = `
     <div class="summary-stat">
       <span class="stat-value">${avgDiz}</span>
-      <span class="stat-label">Avg dizziness</span>
+      <span class="stat-label">Avg intensity</span>
     </div>
     <div class="summary-stat">
-      <span class="stat-value">${avgSleep}h</span>
-      <span class="stat-label">Avg sleep</span>
+      <span class="stat-value">${epsPerDay}</span>
+      <span class="stat-label">Episodes/day</span>
+    </div>
+    <div class="summary-stat">
+      <span class="stat-value">${nightH}h</span>
+      <span class="stat-label">Avg night sleep/day</span>
+    </div>
+    <div class="summary-stat">
+      <span class="stat-value">${napH}h</span>
+      <span class="stat-label">Avg naps/day</span>
     </div>
     <div class="summary-stat">
       <span class="stat-value">${avgStress}</span>
       <span class="stat-label">Avg stress</span>
     </div>
     <div class="summary-stat">
-      <span class="stat-value">${logs.length}/7</span>
-      <span class="stat-label">Days logged</span>
+      <span class="stat-value">${dizzyEps.length}</span>
+      <span class="stat-label">Total episodes</span>
     </div>
     <div class="summary-stat full-width">
       <span class="stat-value" style="font-size:1rem">${topTrig}</span>
@@ -424,12 +653,16 @@ function renderTrendChart() {
     dates.push(localISO(d));
   }
 
-  const logMap = {};
-  getLogs().forEach(l => { logMap[l.date] = l; });
+  // Per-day avg intensity from dizziness episodes
+  const dayAvgMap = {};
+  getEntries().filter(e => e.type === 'dizziness').forEach(e => {
+    if (!dayAvgMap[e.date]) dayAvgMap[e.date] = [];
+    dayAvgMap[e.date].push(e.intensity);
+  });
 
   const points = dates.map(iso => ({
     iso,
-    val: logMap[iso] ? logMap[iso].dizziness : null,
+    val: dayAvgMap[iso] ? r1(mean(dayAvgMap[iso])) : null,
   }));
 
   // Canvas sizing (DPR-aware)
@@ -450,7 +683,7 @@ function renderTrendChart() {
   const toX = i => P.l + (n > 1 ? (i / (n - 1)) * cW : cW / 2);
   const toY = v => P.t + cH - ((v - 1) / 9) * cH;
 
-  // ── Gridlines + Y labels
+  // Gridlines + Y labels
   ctx.strokeStyle = '#dce8eb';
   ctx.lineWidth   = 1;
   ctx.font        = `${10}px -apple-system, sans-serif`;
@@ -466,7 +699,7 @@ function renderTrendChart() {
     ctx.fillText(v, P.l - 5, y + 4);
   });
 
-  // ── Filled area
+  // Filled area
   const withVal = points.map((p, i) => ({ ...p, i })).filter(p => p.val !== null);
   if (withVal.length > 1) {
     ctx.beginPath();
@@ -478,13 +711,13 @@ function renderTrendChart() {
     ctx.lineTo(toX(withVal[0].i), P.t + cH);
     ctx.closePath();
     const grad = ctx.createLinearGradient(0, P.t, 0, P.t + cH);
-    grad.addColorStop(0,   'rgba(95,158,168,0.28)');
-    grad.addColorStop(1,   'rgba(95,158,168,0.02)');
+    grad.addColorStop(0, 'rgba(95,158,168,0.28)');
+    grad.addColorStop(1, 'rgba(95,158,168,0.02)');
     ctx.fillStyle = grad;
     ctx.fill();
   }
 
-  // ── Line
+  // Line
   if (withVal.length > 0) {
     ctx.strokeStyle = '#5f9ea8';
     ctx.lineWidth   = 2.5;
@@ -500,7 +733,7 @@ function renderTrendChart() {
     ctx.stroke();
   }
 
-  // ── Dots
+  // Dots
   points.forEach(({ val }, i) => {
     if (val === null) return;
     ctx.beginPath();
@@ -512,7 +745,7 @@ function renderTrendChart() {
     ctx.stroke();
   });
 
-  // ── X labels (sparse — ~5 labels max)
+  // X labels (sparse — ~5 labels max)
   ctx.fillStyle  = '#9ab4ba';
   ctx.textAlign  = 'center';
   const step = Math.max(1, Math.ceil(n / 5));
@@ -539,26 +772,42 @@ function initChartRangeButtons() {
 function renderInsights() {
   renderInsightCards();
   renderTriggerBars();
+  renderActivityCorrelation();
+  renderTimeOfDay();
   renderSleepChart();
 }
 
 function renderInsightCards() {
-  const container = document.getElementById('insights-list');
-  const allLogs   = getLogs();
+  const container   = document.getElementById('insights-list');
+  const allDizzy    = getEntries().filter(e => e.type === 'dizziness');
+  const allSleep    = getEntries().filter(e => e.type === 'sleep');
 
-  if (allLogs.length < 7) {
-    container.innerHTML = '<p class="empty-state">Log at least 7 days to unlock insights.</p>';
+  if (allDizzy.length < 7) {
+    container.innerHTML = '<p class="empty-state">Log at least 7 episodes to unlock insights.</p>';
     return;
   }
 
   const cards = [];
 
-  // ── 1. Sleep < 6 hrs vs ≥ 6 hrs
-  const poorSleep = allLogs.filter(l => l.sleepHours < 6);
-  const goodSleep = allLogs.filter(l => l.sleepHours >= 6);
+  // ── 1. Night sleep < 6h vs ≥ 6h
+  // Pair days: night sleep hours → avg episode intensity that day
+  const dayPairs = {};
+  allDizzy.forEach(e => {
+    if (!dayPairs[e.date]) dayPairs[e.date] = { dizzy: [], sleep: 0 };
+    dayPairs[e.date].dizzy.push(e.intensity);
+  });
+  allSleep.filter(e => e.sleepType === 'night').forEach(e => {
+    if (!dayPairs[e.date]) dayPairs[e.date] = { dizzy: [], sleep: 0 };
+    dayPairs[e.date].sleep += e.hours || 0;
+  });
+
+  const paired     = Object.values(dayPairs).filter(d => d.dizzy.length > 0 && d.sleep > 0);
+  const poorSleep  = paired.filter(d => d.sleep < 6);
+  const goodSleep  = paired.filter(d => d.sleep >= 6);
+
   if (poorSleep.length >= 2 && goodSleep.length >= 2) {
-    const pAvg = r1(mean(poorSleep.map(l => l.dizziness)));
-    const gAvg = r1(mean(goodSleep.map(l => l.dizziness)));
+    const pAvg = r1(mean(poorSleep.map(d => mean(d.dizzy))));
+    const gAvg = r1(mean(goodSleep.map(d => mean(d.dizzy))));
     const diff = r1(Math.abs(pAvg - gAvg));
     if (diff >= 0.5) {
       const worse = pAvg > gAvg;
@@ -571,27 +820,27 @@ function renderInsightCards() {
   }
 
   // ── 2. High stress (≥7) vs low stress (≤4)
-  const highStress = allLogs.filter(l => l.stress >= 7);
-  const lowStress  = allLogs.filter(l => l.stress <= 4);
+  const highStress = allDizzy.filter(e => e.stress >= 7);
+  const lowStress  = allDizzy.filter(e => e.stress <= 4);
   if (highStress.length >= 2 && lowStress.length >= 2) {
-    const hAvg = r1(mean(highStress.map(l => l.dizziness)));
-    const lAvg = r1(mean(lowStress.map(l => l.dizziness)));
+    const hAvg = r1(mean(highStress.map(e => e.intensity)));
+    const lAvg = r1(mean(lowStress.map(e => e.intensity)));
     const diff = r1(Math.abs(hAvg - lAvg));
     if (diff >= 0.5) {
       cards.push({
         label: 'Stress & Dizziness',
-        html: `On high-stress days (7–10), your average dizziness is <strong>${hAvg}</strong>
-               vs <strong>${lAvg}</strong> on calmer days — a gap of ${diff} points.`,
+        html: `On high-stress episodes (stress 7–10), your average dizziness is <strong>${hAvg}</strong>
+               vs <strong>${lAvg}</strong> on calmer ones — a gap of ${diff} points.`,
       });
     }
   }
 
   // ── 3. Best / hardest day of the week
   const byDow = {};
-  allLogs.forEach(l => {
-    const label = isoToDate(l.date).toLocaleDateString('en-GB', { weekday: 'long' });
+  allDizzy.forEach(e => {
+    const label = isoToDate(e.date).toLocaleDateString('en-GB', { weekday: 'long' });
     if (!byDow[label]) byDow[label] = [];
-    byDow[label].push(l.dizziness);
+    byDow[label].push(e.intensity);
   });
   const dowRanked = Object.entries(byDow)
     .filter(([, v]) => v.length >= 2)
@@ -607,27 +856,29 @@ function renderInsightCards() {
     });
   }
 
-  // ── 4. Current logging streak
-  const loggedDates = new Set(allLogs.map(l => l.date));
+  // ── 4. Logging streak (days with at least one episode)
+  const episodeDates = new Set(allDizzy.map(e => e.date));
   let streak = 0;
   for (let i = 0; ; i++) {
     const d = new Date();
     d.setDate(d.getDate() - i);
-    if (loggedDates.has(localISO(d))) streak++;
+    if (episodeDates.has(localISO(d))) streak++;
     else break;
   }
   if (streak >= 3) {
     cards.push({
       label: 'Logging Streak',
-      html: `You've logged <strong>${streak} day${streak > 1 ? 's' : ''} in a row</strong> —
+      html: `You've logged episodes for <strong>${streak} day${streak > 1 ? 's' : ''} in a row</strong> —
              great consistency. Regular tracking helps uncover your personal patterns.`,
     });
   }
 
-  // ── 5. Recent trend (last 7 vs previous 7)
-  if (allLogs.length >= 14) {
-    const recent = allLogs.slice(-7).map(l => l.dizziness);
-    const prior  = allLogs.slice(-14, -7).map(l => l.dizziness);
+  // ── 5. Recent trend (last 7 days vs previous 7 days by avg daily intensity)
+  const allDates = [...new Set(allDizzy.map(e => e.date))].sort();
+  if (allDates.length >= 14) {
+    const dayAvg = date => r1(mean(allDizzy.filter(e => e.date === date).map(e => e.intensity)));
+    const recent = allDates.slice(-7).map(dayAvg);
+    const prior  = allDates.slice(-14, -7).map(dayAvg);
     const rAvg   = r1(mean(recent));
     const pAvg   = r1(mean(prior));
     const diff   = r1(pAvg - rAvg);
@@ -658,15 +909,15 @@ function renderInsightCards() {
 
 function renderTriggerBars() {
   const container = document.getElementById('top-triggers');
-  const logs      = getThisMonthLogs();
+  const entries   = getThisMonthEntries().filter(e => e.type === 'dizziness');
 
-  if (!logs.length) {
-    container.innerHTML = '<p class="empty-state">No logs this month yet.</p>';
+  if (!entries.length) {
+    container.innerHTML = '<p class="empty-state">No episodes this month yet.</p>';
     return;
   }
 
   const counts = {};
-  logs.forEach(l => (l.triggers || []).forEach(t => { counts[t] = (counts[t] || 0) + 1; }));
+  entries.forEach(e => (e.triggers || []).forEach(t => { counts[t] = (counts[t] || 0) + 1; }));
 
   const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
   if (!sorted.length) {
@@ -681,7 +932,83 @@ function renderTriggerBars() {
       <div class="trigger-bar-track">
         <div class="trigger-bar-fill" style="width:${(count / max) * 100}%"></div>
       </div>
-      <span class="trigger-bar-count">${count}</span>
+      <span class="trigger-bar-count">${count}×</span>
+    </div>
+  `).join('');
+}
+
+// ─────────────────────────────────────────────
+// Insights — activity vs dizziness
+// ─────────────────────────────────────────────
+function renderActivityCorrelation() {
+  const container = document.getElementById('activity-correlation');
+  const entries   = getThisMonthEntries().filter(e => e.type === 'dizziness' && e.activity);
+
+  if (!entries.length) {
+    container.innerHTML = '<p class="empty-state">Log dizziness episodes with activities to see this chart.</p>';
+    return;
+  }
+
+  const byActivity = {};
+  entries.forEach(e => {
+    if (!byActivity[e.activity]) byActivity[e.activity] = [];
+    byActivity[e.activity].push(e.intensity);
+  });
+
+  const sorted = Object.entries(byActivity)
+    .map(([act, vals]) => ({ act, avg: r1(mean(vals)), count: vals.length }))
+    .sort((a, b) => b.avg - a.avg);
+
+  container.innerHTML = sorted.map(({ act, avg, count }) => `
+    <div class="trigger-bar-row">
+      <span class="trigger-bar-label">${ACTIVITY_LABELS[act] || act}</span>
+      <div class="trigger-bar-track">
+        <div class="trigger-bar-fill" style="width:${(avg / 10) * 100}%"></div>
+      </div>
+      <span class="trigger-bar-count">${avg}</span>
+    </div>
+  `).join('');
+}
+
+// ─────────────────────────────────────────────
+// Insights — time of day
+// ─────────────────────────────────────────────
+function renderTimeOfDay() {
+  const container = document.getElementById('time-of-day');
+  const entries   = getThisMonthEntries().filter(e => e.type === 'dizziness' && e.time);
+
+  if (entries.length < 3) {
+    container.innerHTML = '<p class="empty-state">Log more episodes to see time-of-day patterns.</p>';
+    return;
+  }
+
+  const buckets = { Morning: [], Afternoon: [], Evening: [], Night: [] };
+  entries.forEach(e => {
+    const hour = parseInt(e.time.split(':')[0], 10);
+    if      (hour >= 6  && hour < 12) buckets.Morning.push(e.intensity);
+    else if (hour >= 12 && hour < 18) buckets.Afternoon.push(e.intensity);
+    else if (hour >= 18 && hour < 24) buckets.Evening.push(e.intensity);
+    else                              buckets.Night.push(e.intensity);
+  });
+
+  const icons   = { Morning: '🌅', Afternoon: '☀️', Evening: '🌆', Night: '🌙' };
+  const results = Object.entries(buckets)
+    .filter(([, vals]) => vals.length > 0)
+    .map(([period, vals]) => ({ period, avg: r1(mean(vals)), count: vals.length }))
+    .sort((a, b) => b.avg - a.avg);
+
+  if (!results.length) {
+    container.innerHTML = '<p class="empty-state">Not enough data yet.</p>';
+    return;
+  }
+
+  container.innerHTML = results.map(({ period, avg, count }) => `
+    <div class="trigger-bar-row">
+      <span class="trigger-bar-label">${icons[period] || ''} ${period}</span>
+      <div class="trigger-bar-track">
+        <div class="trigger-bar-fill" style="width:${(avg / 10) * 100}%"></div>
+      </div>
+      <span class="trigger-bar-count">${avg}</span>
     </div>
   `).join('');
 }
@@ -693,8 +1020,19 @@ function renderSleepChart() {
   const canvas = document.getElementById('sleep-chart');
   if (!canvas) return;
 
-  const ctx  = canvas.getContext('2d');
-  const logs = getLogs().filter(l => l.sleepHours != null && l.dizziness != null);
+  const ctx = canvas.getContext('2d');
+
+  // Pair per day: night sleep hours → avg episode intensity
+  const byDate = {};
+  getEntries().forEach(e => {
+    if (!byDate[e.date]) byDate[e.date] = { dizzy: [], sleep: 0 };
+    if (e.type === 'dizziness')                      byDate[e.date].dizzy.push(e.intensity);
+    if (e.type === 'sleep' && e.sleepType === 'night') byDate[e.date].sleep += e.hours || 0;
+  });
+
+  const logs = Object.values(byDate)
+    .filter(d => d.dizzy.length > 0 && d.sleep > 0)
+    .map(d => ({ sleepHours: d.sleep, dizziness: r1(mean(d.dizzy)) }));
 
   const dpr  = window.devicePixelRatio || 1;
   const wrap = canvas.parentElement;
@@ -709,7 +1047,7 @@ function renderSleepChart() {
     ctx.fillStyle = '#9ab4ba';
     ctx.font      = '13px -apple-system, sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('Log at least 3 days to see this chart.', W / 2, H / 2);
+    ctx.fillText('Log sleep + episodes on the same day to see this chart.', W / 2, H / 2);
     return;
   }
 
@@ -736,14 +1074,12 @@ function renderSleepChart() {
     ctx.fillText(v, P.l - 5, y + 4);
   });
 
-  // X axis labels
   ctx.textAlign = 'center';
   ctx.fillStyle = '#9ab4ba';
   [0, 3, 6, 9, 12].forEach(h => {
     ctx.fillText(`${h}h`, toX(h), H - P.b + 16);
   });
 
-  // Axis titles
   ctx.fillStyle = '#9ab4ba';
   ctx.font      = '10px -apple-system, sans-serif';
   ctx.textAlign = 'center';
@@ -755,13 +1091,10 @@ function renderSleepChart() {
   ctx.fillText('Dizziness', 0, 0);
   ctx.restore();
 
-  // Scatter dots (colour = dizziness intensity)
+  // Scatter dots
   logs.forEach(l => {
-    const x = toX(l.sleepHours);
-    const y = toY(l.dizziness);
-
     ctx.beginPath();
-    ctx.arc(x, y, 6, 0, Math.PI * 2);
+    ctx.arc(toX(l.sleepHours), toY(l.dizziness), 6, 0, Math.PI * 2);
     ctx.globalAlpha  = 0.72;
     ctx.fillStyle    = dizColor(l.dizziness);
     ctx.fill();
@@ -771,26 +1104,22 @@ function renderSleepChart() {
     ctx.stroke();
   });
 
-  // Simple linear regression line
+  // Regression line
   if (logs.length >= 5) {
-    const xs = logs.map(l => Math.min(l.sleepHours, maxH));
-    const ys = logs.map(l => l.dizziness);
-    const n  = xs.length;
-    const sx = xs.reduce((a, b) => a + b, 0);
-    const sy = ys.reduce((a, b) => a + b, 0);
+    const xs  = logs.map(l => Math.min(l.sleepHours, maxH));
+    const ys  = logs.map(l => l.dizziness);
+    const n   = xs.length;
+    const sx  = xs.reduce((a, b) => a + b, 0);
+    const sy  = ys.reduce((a, b) => a + b, 0);
     const sxy = xs.reduce((a, x, i) => a + x * ys[i], 0);
     const sxx = xs.reduce((a, x) => a + x * x, 0);
-    const denom = n * sxx - sx * sx;
-    if (Math.abs(denom) > 0.001) {
-      const slope = (n * sxy - sx * sy) / denom;
+    const den = n * sxx - sx * sx;
+    if (Math.abs(den) > 0.001) {
+      const slope     = (n * sxy - sx * sy) / den;
       const intercept = (sy - slope * sx) / n;
-      const x0 = 0, x1 = maxH;
-      const y0 = slope * x0 + intercept;
-      const y1 = slope * x1 + intercept;
-
       ctx.beginPath();
-      ctx.moveTo(toX(x0), toY(Math.max(1, Math.min(10, y0))));
-      ctx.lineTo(toX(x1), toY(Math.max(1, Math.min(10, y1))));
+      ctx.moveTo(toX(0),    toY(Math.max(1, Math.min(10, intercept))));
+      ctx.lineTo(toX(maxH), toY(Math.max(1, Math.min(10, slope * maxH + intercept))));
       ctx.strokeStyle = 'rgba(95,158,168,0.5)';
       ctx.lineWidth   = 1.5;
       ctx.setLineDash([4, 4]);
@@ -805,15 +1134,22 @@ function renderSleepChart() {
 // ─────────────────────────────────────────────
 function initExport() {
   document.querySelectorAll('.export-btn').forEach(btn => {
-    btn.addEventListener('click', () => exportCSV(+btn.dataset.days));
+    btn.addEventListener('click', () => {
+      const type = btn.dataset.type;
+      const days = +btn.dataset.days;
+      if (type === 'episodes') exportEpisodesCSV(days);
+      else if (type === 'sleep') exportSleepCSV(days);
+    });
   });
 
   document.getElementById('clear-data-btn').addEventListener('click', () => {
     showModal(
       'Clear All Data?',
-      'This will permanently delete every log entry from this device. This cannot be undone.',
+      'This will permanently delete every entry from this device. This cannot be undone.',
       () => {
         localStorage.removeItem(STORAGE_KEY);
+        renderTimeline();
+        renderTodaySummary();
         renderExportStats();
         showModal('Done', 'All data has been cleared.', null, true);
       }
@@ -822,61 +1158,92 @@ function initExport() {
 }
 
 function renderExportStats() {
-  const logs = getLogs();
-  const el   = document.getElementById('data-stats');
+  const entries = getEntries();
+  const el      = document.getElementById('data-stats');
 
-  if (!logs.length) {
+  if (!entries.length) {
     el.textContent = 'No data logged yet.';
     return;
   }
 
-  const first = logs[0].date;
-  const last  = logs[logs.length - 1].date;
+  const dizzy = entries.filter(e => e.type === 'dizziness');
+  const sleep = entries.filter(e => e.type === 'sleep');
+  const first = entries[0].date;
+  const last  = entries[entries.length - 1].date;
+
   el.innerHTML = `
-    <strong>${logs.length}</strong> entr${logs.length === 1 ? 'y' : 'ies'} logged<br>
+    <strong>${dizzy.length}</strong> dizziness episode${dizzy.length !== 1 ? 's' : ''},
+    <strong>${sleep.length}</strong> sleep entr${sleep.length !== 1 ? 'ies' : 'y'}<br>
     From <strong>${formatShort(first)}</strong> to <strong>${formatShort(last)}</strong>
   `;
 }
 
-function exportCSV(days) {
-  const logs = getLogsInRange(days);
-  if (!logs.length) {
-    showModal('Nothing to Export', `No entries found for this time period.`, null, true);
+function downloadCSV(csv, filename) {
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function exportEpisodesCSV(days) {
+  const entries = getEntriesInRange(days).filter(e => e.type === 'dizziness');
+  if (!entries.length) {
+    showModal('Nothing to Export', 'No dizziness episodes found for this time period.', null, true);
     return;
   }
 
   const header = [
     'Date',
-    'Dizziness (1-10)',
+    'Time',
+    'Intensity (1-10)',
+    'Activity',
+    'Activity Detail',
     'Triggers',
-    'Sleep Hours',
-    'Sleep Quality (1-5)',
     'Stress (1-10)',
     'Notes',
   ];
 
-  const rows = logs.map(l => [
-    l.date,
-    l.dizziness,
-    (l.triggers || []).map(t => TRIGGER_LABELS[t] || t).join('; '),
-    l.sleepHours,
-    l.sleepQuality,
-    l.stress,
-    `"${(l.notes || '').replace(/"/g, '""')}"`,
+  const rows = entries.map(e => [
+    e.date,
+    e.time,
+    e.intensity,
+    e.activity ? (ACTIVITY_LABELS[e.activity] || e.activity).replace(/^\S+\s/, '') : '',
+    `"${(e.activityDetail || '').replace(/"/g, '""')}"`,
+    `"${(e.triggers || []).map(t => TRIGGER_LABELS[t] || t).join('; ').replace(/"/g, '""')}"`,
+    e.stress,
+    `"${(e.notes || '').replace(/"/g, '""')}"`,
   ]);
 
-  const csv  = [header, ...rows].map(r => r.join(',')).join('\r\n');
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
+  const csv   = [header, ...rows].map(r => r.join(',')).join('\r\n');
   const label = days === 0 ? 'all-time' : `${days}d`;
+  downloadCSV(csv, `pppd-episodes-${label}-${todayISO()}.csv`);
+}
 
-  a.href     = url;
-  a.download = `pppd-log-${label}-${todayISO()}.csv`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+function exportSleepCSV(days) {
+  const entries = getEntriesInRange(days).filter(e => e.type === 'sleep');
+  if (!entries.length) {
+    showModal('Nothing to Export', 'No sleep entries found for this time period.', null, true);
+    return;
+  }
+
+  const header = ['Date', 'Type', 'Hours', 'Quality (1-5)', 'Notes'];
+
+  const rows = entries.map(e => [
+    e.date,
+    e.sleepType === 'night' ? 'Night' : 'Nap',
+    e.hours,
+    e.quality,
+    `"${(e.notes || '').replace(/"/g, '""')}"`,
+  ]);
+
+  const csv   = [header, ...rows].map(r => r.join(',')).join('\r\n');
+  const label = days === 0 ? 'all-time' : `${days}d`;
+  downloadCSV(csv, `pppd-sleep-${label}-${todayISO()}.csv`);
 }
 
 // ─────────────────────────────────────────────
@@ -906,11 +1273,15 @@ function showModal(title, body, onConfirm, infoOnly = false) {
 
   const close = () => overlay.classList.add('hidden');
 
-  // Replace handlers each time (avoid stacking listeners)
   confirmBtn.onclick = () => { close(); onConfirm?.(); };
   cancelBtn.onclick  = close;
 
-  const bgClose = e => { if (e.target === overlay) { close(); overlay.removeEventListener('click', bgClose); } };
+  const bgClose = e => {
+    if (e.target === overlay) {
+      close();
+      overlay.removeEventListener('click', bgClose);
+    }
+  };
   overlay.addEventListener('click', bgClose);
 }
 
@@ -945,10 +1316,16 @@ function init() {
   initHeader();
   initNav();
   initLog();
+  initDizzySheet();
+  initSleepSheet();
   initCalNav();
   initChartRangeButtons();
   initExport();
   initResizeObserver();
+
+  // Close sheet when overlay is tapped
+  document.getElementById('sheet-overlay').addEventListener('click', closeSheet);
+
   registerSW();
 }
 
