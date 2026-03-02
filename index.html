@@ -3,11 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="theme-color" content="#6b9ea8" />
+  <meta name="theme-color" content="#5f9ea8" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="PPPD Tracker" />
-  <meta name="description" content="Daily symptom tracker for Persistent Postural-Perceptual Dizziness" />
+  <meta name="description" content="PPPD symptom tracker — daily log, exercise tracking, insights" />
   <title>PPPD Tracker</title>
   <link rel="manifest" href="manifest.json" />
   <link rel="apple-touch-icon" href="icons/icon-192.png" />
@@ -15,97 +15,100 @@
 </head>
 <body>
 
-  <!-- ── App Shell ── -->
   <div id="app">
 
-    <!-- Header -->
+    <!-- ── Header ── -->
     <header id="app-header">
       <div class="header-inner">
         <h1 id="header-title">Daily Log</h1>
-        <span id="header-date"></span>
+        <div class="header-right">
+          <span id="header-date"></span>
+          <button id="btn-settings" type="button" aria-label="Settings" class="btn-icon">&#9881;</button>
+        </div>
       </div>
     </header>
 
-    <!-- ── VIEWS ── -->
+    <!-- ── Main Content ── -->
     <main id="main-content">
 
       <!-- ══ VIEW: Daily Log ══ -->
-      <section id="view-log" class="view active" aria-label="Daily log">
+      <section id="view-daily" class="view active" aria-label="Daily log">
 
-        <!-- Today summary bar -->
         <div class="card">
-          <div class="today-summary" id="today-summary">
-            <div class="summary-pill">
-              <div class="summary-pill-value" id="summary-episodes">0</div>
-              <div class="summary-pill-label">Episodes</div>
+          <div class="section-heading">
+            <h2>Monthly Overview</h2>
+            <div class="cal-nav">
+              <button id="daily-cal-prev" type="button" aria-label="Previous month">&#8249;</button>
+              <span id="daily-cal-month-label"></span>
+              <button id="daily-cal-next" type="button" aria-label="Next month">&#8250;</button>
             </div>
-            <div class="summary-pill">
-              <div class="summary-pill-value" id="summary-avg-max">—</div>
-              <div class="summary-pill-label">Avg · Max</div>
-            </div>
-            <div class="summary-pill">
-              <div class="summary-pill-value" id="summary-sleep">—</div>
-              <div class="summary-pill-label">Sleep</div>
-            </div>
+          </div>
+          <div id="daily-calendar-grid" class="calendar-grid" role="grid" aria-label="Daily log calendar"></div>
+          <div class="cal-legend">
+            <span class="legend-item"><span class="legend-dot dot-comply-full"></span>Both done</span>
+            <span class="legend-item"><span class="legend-dot dot-comply-partial"></span>One done</span>
+            <span class="legend-item"><span class="legend-dot dot-comply-none"></span>Neither</span>
+            <span class="legend-item"><span class="legend-dot dot-no-log"></span>No log</span>
           </div>
         </div>
 
-        <!-- Action buttons -->
-        <div class="action-row">
-          <button id="btn-log-dizziness" type="button" class="btn-action-primary">
-            🌀 Log Dizziness
-          </button>
-          <button id="btn-log-sleep" type="button" class="btn-action-secondary" aria-label="Log sleep">
-            🌙
-          </button>
-        </div>
-
-        <!-- Today's Timeline -->
         <div class="card">
-          <h2 class="section-heading">Today's Timeline</h2>
-          <div class="timeline" id="today-timeline">
-            <p class="empty-state">No entries yet today. Tap a button above to log.</p>
+          <div class="section-heading">
+            <h2>Today</h2>
+            <button id="btn-log-today" type="button" class="btn-small-primary">Log / Edit</button>
+          </div>
+          <div id="daily-today-summary">
+            <p class="empty-state">Tap "Log / Edit" to record today's sleep and therapy compliance.</p>
           </div>
         </div>
 
       </section>
 
-      <!-- ══ VIEW: History ══ -->
-      <section id="view-history" class="view" aria-label="History">
+      <!-- ══ VIEW: Weekly Scores ══ -->
+      <section id="view-weekly" class="view" aria-label="Weekly exercise scores">
 
         <div class="card">
           <div class="section-heading">
-            <h2>Calendar</h2>
+            <h2>Exercise Scores</h2>
             <div class="cal-nav">
-              <button id="cal-prev" type="button" aria-label="Previous month">‹</button>
-              <span id="cal-month-label"></span>
-              <button id="cal-next" type="button" aria-label="Next month">›</button>
+              <button id="week-prev" type="button" aria-label="Previous week">&#8249;</button>
+              <button id="week-next" type="button" aria-label="Next week">&#8250;</button>
             </div>
           </div>
-          <div id="calendar-grid" class="calendar-grid" role="grid" aria-label="Calendar"></div>
-          <div class="cal-legend">
-            <span class="legend-item"><span class="legend-dot dot-none"></span>No log</span>
-            <span class="legend-item"><span class="legend-dot dot-low"></span>1–3</span>
-            <span class="legend-item"><span class="legend-dot dot-mid"></span>4–6</span>
-            <span class="legend-item"><span class="legend-dot dot-high"></span>7–9</span>
-            <span class="legend-item"><span class="legend-dot dot-max"></span>10</span>
+          <p id="weekly-week-label" class="body-text"></p>
+          <div id="weekly-exercises-list" class="weekly-exercises-list"></div>
+          <div id="weekly-no-exercises" class="empty-state" style="display:none">
+            No active exercises selected. Tap the settings icon to configure your exercise set.
           </div>
+          <button id="btn-save-weekly" type="button" class="btn-primary">Save Scores</button>
         </div>
 
         <div class="card">
-          <h2 class="section-heading">Weekly Summary</h2>
-          <div id="weekly-summary" class="summary-grid"></div>
+          <h2 class="section-heading">Score Trends</h2>
+          <div class="chart-wrap chart-wrap-md">
+            <canvas id="weekly-trend-chart" aria-label="Weekly exercise score trends"></canvas>
+          </div>
+          <p id="weekly-chart-empty" class="empty-state" style="display:none">Log scores for at least 2 weeks to see trends.</p>
+        </div>
+
+      </section>
+
+      <!-- ══ VIEW: Episode Log ══ -->
+      <section id="view-log" class="view" aria-label="Episode log">
+
+        <div class="log-header-row">
+          <div class="log-date-nav">
+            <button id="log-date-prev" type="button" aria-label="Previous day">&#8249;</button>
+            <span id="log-date-label" class="log-date-display"></span>
+            <button id="log-date-next" type="button" aria-label="Next day">&#8250;</button>
+          </div>
+          <button id="btn-add-episode" type="button" class="btn-action-primary">+ Episode</button>
         </div>
 
         <div class="card">
-          <h2 class="section-heading">Dizziness Over Time</h2>
-          <div class="chart-wrap">
-            <canvas id="trend-chart" aria-label="Dizziness trend chart"></canvas>
-          </div>
-          <div class="chart-range-btns">
-            <button class="range-btn active" data-days="14" type="button">2 weeks</button>
-            <button class="range-btn" data-days="30" type="button">30 days</button>
-            <button class="range-btn" data-days="90" type="button">90 days</button>
+          <h2 class="section-heading">Timeline</h2>
+          <div id="log-timeline" class="timeline">
+            <p class="empty-state">No episodes for this day.</p>
           </div>
         </div>
 
@@ -114,35 +117,63 @@
       <!-- ══ VIEW: Insights ══ -->
       <section id="view-insights" class="view" aria-label="Insights">
 
+        <div class="chart-range-btns" id="insights-range-btns">
+          <button class="range-btn active" data-days="30" type="button">30 days</button>
+          <button class="range-btn" data-days="90" type="button">90 days</button>
+        </div>
+
         <div class="card">
-          <h2 class="section-heading">This Month's Insights</h2>
-          <div id="insights-list" class="insights-list">
-            <p class="empty-state">Log at least 7 episodes to unlock insights.</p>
+          <h2 class="section-heading">Dizziness Trend</h2>
+          <div class="chart-wrap">
+            <canvas id="diz-trend-chart" aria-label="Dizziness trend over time"></canvas>
           </div>
         </div>
 
         <div class="card">
-          <h2 class="section-heading">Top Triggers This Month</h2>
-          <div id="top-triggers" class="trigger-bars"></div>
+          <h2 class="section-heading">Sleep vs Next-Day Dizziness</h2>
+          <p class="body-text">Night sleep hours correlated with next day's average dizziness</p>
+          <div class="chart-wrap">
+            <canvas id="sleep-diz-chart" aria-label="Sleep hours vs next day dizziness"></canvas>
+          </div>
         </div>
 
         <div class="card">
-          <h2 class="section-heading">Activity &amp; Dizziness</h2>
-          <p class="body-text" style="margin-bottom:4px">Avg intensity by activity this month</p>
-          <div id="activity-correlation" class="trigger-bars"></div>
+          <h2 class="section-heading">Activity Patterns</h2>
+          <p class="body-text">Average dizziness intensity by activity</p>
+          <div class="chart-wrap chart-wrap-tall">
+            <canvas id="activity-chart" aria-label="Average dizziness by activity type"></canvas>
+          </div>
         </div>
 
         <div class="card">
           <h2 class="section-heading">Time of Day</h2>
-          <p class="body-text" style="margin-bottom:4px">Avg intensity by time period this month</p>
-          <div id="time-of-day" class="trigger-bars"></div>
+          <p class="body-text">Average dizziness by time block</p>
+          <div class="chart-wrap">
+            <canvas id="tod-chart" aria-label="Average dizziness by time of day"></canvas>
+          </div>
         </div>
 
         <div class="card">
-          <h2 class="section-heading">Sleep vs Dizziness</h2>
-          <div class="chart-wrap">
-            <canvas id="sleep-chart" aria-label="Sleep vs dizziness scatter chart"></canvas>
+          <h2 class="section-heading">Compliance Streak</h2>
+          <div id="compliance-streak-display" class="streak-display"></div>
+          <p class="body-text" style="margin-top:8px;margin-bottom:4px">Last 90 days</p>
+          <div class="heatmap-wrap">
+            <canvas id="compliance-heatmap" aria-label="90-day compliance heatmap"></canvas>
           </div>
+          <div class="cal-legend" style="margin-top:8px">
+            <span class="legend-item"><span class="legend-dot dot-comply-full"></span>Both done</span>
+            <span class="legend-item"><span class="legend-dot dot-comply-partial"></span>One done</span>
+            <span class="legend-item"><span class="legend-dot dot-comply-none"></span>Neither</span>
+            <span class="legend-item"><span class="legend-dot dot-no-log"></span>No log</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2 class="section-heading">Weekly Exercise Score Trends</h2>
+          <div class="chart-wrap chart-wrap-md">
+            <canvas id="exercise-trends-chart" aria-label="Weekly exercise score trends per exercise"></canvas>
+          </div>
+          <p id="exercise-trends-empty" class="empty-state" style="display:none">Log weekly scores for at least 2 weeks to see trends.</p>
         </div>
 
       </section>
@@ -152,56 +183,49 @@
 
         <div class="card">
           <h2 class="section-heading">Export Episodes</h2>
-          <p class="body-text">Download dizziness episode data to share with your doctor.</p>
+          <p class="body-text">Continuous log (dizziness, walk, meditation, nap).</p>
           <div class="export-options">
             <button class="export-btn" data-type="episodes" data-days="30" type="button">
-              <span class="export-icon">💫</span>
-              <div>
-                <strong>Last 30 Days</strong>
-                <span>Episodes CSV</span>
-              </div>
+              <span class="export-icon">&#128171;</span>
+              <div><strong>Last 30 Days</strong><span>Episodes CSV</span></div>
             </button>
             <button class="export-btn" data-type="episodes" data-days="90" type="button">
-              <span class="export-icon">💫</span>
-              <div>
-                <strong>Last 90 Days</strong>
-                <span>Episodes CSV</span>
-              </div>
+              <span class="export-icon">&#128171;</span>
+              <div><strong>Last 90 Days</strong><span>Episodes CSV</span></div>
             </button>
             <button class="export-btn" data-type="episodes" data-days="0" type="button">
-              <span class="export-icon">💫</span>
-              <div>
-                <strong>All Time</strong>
-                <span>Episodes CSV</span>
-              </div>
+              <span class="export-icon">&#128171;</span>
+              <div><strong>All Time</strong><span>Episodes CSV</span></div>
             </button>
           </div>
         </div>
 
         <div class="card">
-          <h2 class="section-heading">Export Sleep</h2>
-          <p class="body-text">Download sleep log data.</p>
+          <h2 class="section-heading">Export Daily Log</h2>
+          <p class="body-text">Sleep, nap, and therapy compliance data.</p>
           <div class="export-options">
-            <button class="export-btn" data-type="sleep" data-days="30" type="button">
-              <span class="export-icon">🌙</span>
-              <div>
-                <strong>Last 30 Days</strong>
-                <span>Sleep CSV</span>
-              </div>
+            <button class="export-btn" data-type="daily" data-days="30" type="button">
+              <span class="export-icon">&#127769;</span>
+              <div><strong>Last 30 Days</strong><span>Daily Log CSV</span></div>
             </button>
-            <button class="export-btn" data-type="sleep" data-days="90" type="button">
-              <span class="export-icon">🌙</span>
-              <div>
-                <strong>Last 90 Days</strong>
-                <span>Sleep CSV</span>
-              </div>
+            <button class="export-btn" data-type="daily" data-days="90" type="button">
+              <span class="export-icon">&#127769;</span>
+              <div><strong>Last 90 Days</strong><span>Daily Log CSV</span></div>
             </button>
-            <button class="export-btn" data-type="sleep" data-days="0" type="button">
-              <span class="export-icon">🌙</span>
-              <div>
-                <strong>All Time</strong>
-                <span>Sleep CSV</span>
-              </div>
+            <button class="export-btn" data-type="daily" data-days="0" type="button">
+              <span class="export-icon">&#127769;</span>
+              <div><strong>All Time</strong><span>Daily Log CSV</span></div>
+            </button>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2 class="section-heading">Export Weekly Scores</h2>
+          <p class="body-text">Exercise dizziness scores by week.</p>
+          <div class="export-options">
+            <button class="export-btn" data-type="weekly" data-days="0" type="button">
+              <span class="export-icon">&#128202;</span>
+              <div><strong>All Weeks</strong><span>Weekly Scores CSV</span></div>
             </button>
           </div>
         </div>
@@ -217,162 +241,216 @@
 
     </main>
 
-    <!-- Bottom navigation -->
+    <!-- ── Bottom Navigation ── -->
     <nav id="bottom-nav" aria-label="Main navigation">
-      <button class="nav-btn active" data-view="log" type="button">
-        <span class="nav-icon">📝</span>
+      <button class="nav-btn active" data-view="daily" type="button">
+        <span class="nav-icon">&#128197;</span>
+        <span class="nav-label">Daily</span>
+      </button>
+      <button class="nav-btn" data-view="weekly" type="button">
+        <span class="nav-icon">&#128202;</span>
+        <span class="nav-label">Weekly</span>
+      </button>
+      <button class="nav-btn" data-view="log" type="button">
+        <span class="nav-icon">&#128221;</span>
         <span class="nav-label">Log</span>
       </button>
-      <button class="nav-btn" data-view="history" type="button">
-        <span class="nav-icon">📅</span>
-        <span class="nav-label">History</span>
-      </button>
       <button class="nav-btn" data-view="insights" type="button">
-        <span class="nav-icon">💡</span>
+        <span class="nav-icon">&#128161;</span>
         <span class="nav-label">Insights</span>
       </button>
       <button class="nav-btn" data-view="export" type="button">
-        <span class="nav-icon">📤</span>
+        <span class="nav-icon">&#128228;</span>
         <span class="nav-label">Export</span>
       </button>
     </nav>
 
   </div><!-- /#app -->
 
-  <!-- ── Sheet overlay ── -->
+  <!-- ── Sheet Overlay ── -->
   <div id="sheet-overlay" class="sheet-overlay hidden"></div>
 
-  <!-- ── Dizziness episode form sheet ── -->
-  <div id="sheet-dizziness" class="form-sheet hidden" role="dialog" aria-modal="true" aria-label="Log dizziness episode">
+  <!-- ── Daily Log Sheet ── -->
+  <div id="sheet-daily" class="form-sheet hidden" role="dialog" aria-modal="true" aria-label="Log daily data">
     <div class="sheet-handle"></div>
-    <h3 class="sheet-title">Log Dizziness Episode</h3>
+    <h3 class="sheet-title" id="daily-sheet-title">Daily Log</h3>
+
+    <div class="sheet-section-header">Sleep Last Night</div>
+
+    <div class="sheet-field">
+      <label class="field-label">Hours (0 – 12 h)</label>
+      <div class="stepper-row">
+        <button type="button" id="daily-sleep-minus" class="stepper-btn" aria-label="Decrease hours">&#8722;</button>
+        <span id="daily-sleep-display" class="stepper-val">7.0 h</span>
+        <button type="button" id="daily-sleep-plus" class="stepper-btn" aria-label="Increase hours">+</button>
+      </div>
+    </div>
+
+    <div class="sheet-field">
+      <span class="field-label">Quality</span>
+      <div class="star-row" id="daily-sleep-quality" role="group" aria-label="Sleep quality 1 to 5">
+        <button class="star" data-value="1" type="button" aria-label="1 star">&#9733;</button>
+        <button class="star" data-value="2" type="button" aria-label="2 stars">&#9733;</button>
+        <button class="star" data-value="3" type="button" aria-label="3 stars">&#9733;</button>
+        <button class="star" data-value="4" type="button" aria-label="4 stars">&#9733;</button>
+        <button class="star" data-value="5" type="button" aria-label="5 stars">&#9733;</button>
+      </div>
+    </div>
+
+    <div class="sheet-field">
+      <label class="field-label" for="daily-sleep-notes">Notes <span class="optional">(optional)</span></label>
+      <textarea id="daily-sleep-notes" rows="2" placeholder="Any observations about last night's sleep…"></textarea>
+    </div>
+
+    <div class="sheet-section-header">Afternoon Nap</div>
+
+    <div class="sheet-field">
+      <label class="checkbox-label">
+        <input type="checkbox" id="daily-nap-toggle" />
+        <span>Logged an afternoon nap</span>
+      </label>
+    </div>
+
+    <div id="daily-nap-wrap" class="sheet-field" style="display:none">
+      <label class="field-label">Duration (0.5 – 4 h)</label>
+      <div class="stepper-row">
+        <button type="button" id="daily-nap-minus" class="stepper-btn" aria-label="Decrease duration">&#8722;</button>
+        <span id="daily-nap-display" class="stepper-val">1.0 h</span>
+        <button type="button" id="daily-nap-plus" class="stepper-btn" aria-label="Increase duration">+</button>
+      </div>
+    </div>
+
+    <div class="sheet-section-header">Therapy Compliance</div>
+
+    <div class="sheet-field compliance-checks">
+      <label class="checkbox-label">
+        <input type="checkbox" id="daily-exercises-done" />
+        <span>Did exercises today</span>
+      </label>
+      <label class="checkbox-label">
+        <input type="checkbox" id="daily-video-done" />
+        <span>Watched therapy video today</span>
+      </label>
+    </div>
+
+    <div id="daily-exercise-checklist-wrap" class="sheet-field" style="display:none">
+      <span class="field-label">Which exercises? <span class="optional">(untick any you skipped)</span></span>
+      <div id="daily-exercise-checklist" class="exercise-checklist"></div>
+    </div>
+
+    <div class="sheet-actions">
+      <button type="button" id="daily-cancel" class="btn-secondary">Cancel</button>
+      <button type="button" id="daily-save" class="btn-primary">Save</button>
+    </div>
+  </div>
+
+  <!-- ── Episode Sheet ── -->
+  <div id="sheet-episode" class="form-sheet hidden" role="dialog" aria-modal="true" aria-label="Log episode">
+    <div class="sheet-handle"></div>
+    <h3 class="sheet-title" id="ep-sheet-title">Log Episode</h3>
+
+    <div class="sheet-field">
+      <span class="field-label">Type</span>
+      <div class="episode-type-grid" id="ep-type-selector" role="group" aria-label="Episode type">
+        <button class="type-btn active" data-type="dizziness" type="button">&#127744; Dizziness</button>
+        <button class="type-btn" data-type="meditation" type="button">&#129307; Meditation</button>
+        <button class="type-btn" data-type="walk" type="button">&#128694; Walk</button>
+        <button class="type-btn" data-type="nap" type="button">&#128564; Nap</button>
+      </div>
+    </div>
 
     <div class="sheet-field">
       <label class="field-label" for="ep-time">Time</label>
       <input type="time" id="ep-time" />
     </div>
 
-    <div class="sheet-field">
-      <label class="field-label" for="ep-intensity">
-        Intensity
-        <span class="value-badge" id="ep-intensity-badge">5</span>
-      </label>
-      <div class="slider-track">
-        <input type="range" id="ep-intensity" min="1" max="10" value="5" step="1"
-          aria-valuemin="1" aria-valuemax="10" />
-        <div class="slider-labels">
-          <span>1 — Mild</span>
-          <span>10 — Severe</span>
+    <!-- Dizziness fields -->
+    <div id="ep-dizziness-fields">
+      <div class="sheet-field">
+        <label class="field-label" for="ep-intensity">
+          Intensity
+          <span class="value-badge" id="ep-intensity-badge">5</span>
+        </label>
+        <div class="slider-track">
+          <input type="range" id="ep-intensity" min="1" max="10" value="5" step="1"
+            aria-valuemin="1" aria-valuemax="10" />
+          <div class="slider-labels"><span>1 &#8212; Mild</span><span>10 &#8212; Severe</span></div>
         </div>
       </div>
-    </div>
 
-    <div class="sheet-field">
-      <span class="field-label">Activity</span>
-      <div class="chip-grid" id="activity-chips" role="group" aria-label="Select activity">
-        <button class="chip" data-activity="computer" type="button">💻 Computer</button>
-        <button class="chip" data-activity="reading"  type="button">📖 Reading</button>
-        <button class="chip" data-activity="walking"  type="button">🚶 Walking</button>
-        <button class="chip" data-activity="shopping" type="button">🛒 Shopping</button>
-        <button class="chip" data-activity="driving"  type="button">🚗 Driving</button>
-        <button class="chip" data-activity="tv"       type="button">📺 TV</button>
-        <button class="chip" data-activity="cooking"  type="button">🍳 Cooking</button>
-        <button class="chip" data-activity="resting"  type="button">🛋️ Resting</button>
-        <button class="chip" data-activity="phone"    type="button">📱 Phone</button>
-        <button class="chip" data-activity="outside"  type="button">🌳 Outside</button>
-        <button class="chip" data-activity="exercise" type="button">🏃 Exercise</button>
-        <button class="chip" data-activity="other"    type="button">➕ Other</button>
-      </div>
-    </div>
-
-    <div class="sheet-field" id="activity-detail-wrap" style="display:none">
-      <label class="field-label" for="ep-activity-detail">
-        Activity Detail <span class="optional">(optional)</span>
-      </label>
-      <input type="text" id="ep-activity-detail" placeholder="e.g. reading PDF, video call…" />
-    </div>
-
-    <div class="sheet-field">
-      <span class="field-label">Triggers</span>
-      <div class="chip-grid" id="ep-triggers-grid" role="group" aria-label="Select triggers">
-        <button class="chip" data-trigger="screens"   type="button">📱 Screens</button>
-        <button class="chip" data-trigger="movement"  type="button">🔄 Movement</button>
-        <button class="chip" data-trigger="crowds"    type="button">👥 Crowds</button>
-        <button class="chip" data-trigger="fatigue"   type="button">😴 Fatigue</button>
-        <button class="chip" data-trigger="stress"    type="button">😰 Stress</button>
-        <button class="chip" data-trigger="noise"     type="button">🔊 Noise</button>
-        <button class="chip" data-trigger="light"     type="button">💡 Bright Light</button>
-        <button class="chip" data-trigger="other"     type="button">➕ Other</button>
-      </div>
-    </div>
-
-    <div class="sheet-field">
-      <label class="field-label" for="ep-stress">
-        Stress
-        <span class="value-badge" id="ep-stress-badge">5</span>
-      </label>
-      <div class="slider-track">
-        <input type="range" id="ep-stress" min="1" max="10" value="5" step="1"
-          aria-valuemin="1" aria-valuemax="10" />
-        <div class="slider-labels">
-          <span>1 — Calm</span>
-          <span>10 — Very stressed</span>
+      <div class="sheet-field">
+        <label class="field-label" for="ep-stress">
+          Stress
+          <span class="value-badge" id="ep-stress-badge">5</span>
+        </label>
+        <div class="slider-track">
+          <input type="range" id="ep-stress" min="1" max="10" value="5" step="1"
+            aria-valuemin="1" aria-valuemax="10" />
+          <div class="slider-labels"><span>1 &#8212; Calm</span><span>10 &#8212; Very stressed</span></div>
         </div>
       </div>
+
+      <div class="sheet-field">
+        <span class="field-label">Activity <span class="optional">(optional)</span></span>
+        <div class="chip-grid" id="ep-activity-chips" role="group" aria-label="Select activity"></div>
+      </div>
+
+      <div class="sheet-field">
+        <label class="field-label" for="ep-notes-diz">Notes <span class="optional">(optional)</span></label>
+        <textarea id="ep-notes-diz" rows="2" placeholder="Any observations…"></textarea>
+      </div>
     </div>
 
-    <div class="sheet-field">
-      <label class="field-label" for="ep-notes">Notes <span class="optional">(optional)</span></label>
-      <textarea id="ep-notes" rows="2" placeholder="Any observations…"></textarea>
+    <!-- Nap fields -->
+    <div id="ep-nap-fields" style="display:none">
+      <div class="sheet-field">
+        <label class="field-label">Duration (0.5 – 4 h)</label>
+        <div class="stepper-row">
+          <button type="button" id="ep-nap-minus" class="stepper-btn" aria-label="Decrease duration">&#8722;</button>
+          <span id="ep-nap-display" class="stepper-val">1.0 h</span>
+          <button type="button" id="ep-nap-plus" class="stepper-btn" aria-label="Increase duration">+</button>
+        </div>
+      </div>
+      <div class="sheet-field">
+        <label class="field-label" for="ep-notes-nap">Notes <span class="optional">(optional)</span></label>
+        <textarea id="ep-notes-nap" rows="2" placeholder="Any observations…"></textarea>
+      </div>
+    </div>
+
+    <!-- Meditation / Walk notes -->
+    <div id="ep-simple-fields" style="display:none">
+      <div class="sheet-field">
+        <label class="field-label" for="ep-notes-simple">Notes <span class="optional">(optional)</span></label>
+        <textarea id="ep-notes-simple" rows="2" placeholder="Any observations…"></textarea>
+      </div>
     </div>
 
     <div class="sheet-actions">
-      <button id="ep-cancel" type="button" class="btn-secondary">Cancel</button>
-      <button id="ep-save"   type="button" class="btn-primary">Save Episode</button>
+      <button type="button" id="ep-cancel" class="btn-secondary">Cancel</button>
+      <button type="button" id="ep-save" class="btn-primary">Save Episode</button>
     </div>
   </div>
 
-  <!-- ── Sleep form sheet ── -->
-  <div id="sheet-sleep" class="form-sheet hidden" role="dialog" aria-modal="true" aria-label="Log sleep">
+  <!-- ── Settings Sheet ── -->
+  <div id="sheet-settings" class="form-sheet hidden" role="dialog" aria-modal="true" aria-label="Settings">
     <div class="sheet-handle"></div>
-    <h3 class="sheet-title">Log Sleep</h3>
+    <h3 class="sheet-title">Exercise Settings</h3>
+    <p class="body-text">Select which exercises are in your current active set. These appear in your daily compliance log and weekly scoring.</p>
 
     <div class="sheet-field">
-      <span class="field-label">Type</span>
-      <div class="sleep-type-toggle">
-        <button class="sleep-type-btn active" data-type="night" type="button">🌙 Night Sleep</button>
-        <button class="sleep-type-btn"        data-type="nap"   type="button">😴 Nap</button>
+      <span class="field-label">Active Exercises (select 1&#8202;&#8211;&#8202;12)</span>
+      <div id="settings-exercise-grid" class="settings-exercise-grid">
+        <!-- Generated by JS -->
       </div>
-    </div>
-
-    <div class="sheet-field">
-      <label class="field-label" for="sl-hours">Hours</label>
-      <input type="number" id="sl-hours" min="0" max="24" step="0.5" value="7" inputmode="decimal" />
-    </div>
-
-    <div class="sheet-field">
-      <span class="field-label">Quality</span>
-      <div class="star-row" id="sl-quality" role="group" aria-label="Sleep quality 1 to 5">
-        <button class="star" data-value="1" type="button" aria-label="1 star">★</button>
-        <button class="star" data-value="2" type="button" aria-label="2 stars">★</button>
-        <button class="star" data-value="3" type="button" aria-label="3 stars">★</button>
-        <button class="star" data-value="4" type="button" aria-label="4 stars">★</button>
-        <button class="star" data-value="5" type="button" aria-label="5 stars">★</button>
-      </div>
-    </div>
-
-    <div class="sheet-field">
-      <label class="field-label" for="sl-notes">Notes <span class="optional">(optional)</span></label>
-      <textarea id="sl-notes" rows="2" placeholder="Any observations…"></textarea>
     </div>
 
     <div class="sheet-actions">
-      <button id="sl-cancel" type="button" class="btn-secondary">Cancel</button>
-      <button id="sl-save"   type="button" class="btn-primary">Save Sleep</button>
+      <button type="button" id="settings-cancel" class="btn-secondary">Cancel</button>
+      <button type="button" id="settings-save" class="btn-primary">Save Settings</button>
     </div>
   </div>
 
-  <!-- Confirmation modal -->
+  <!-- ── Confirmation Modal ── -->
   <div id="modal-overlay" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="modal-title">
     <div class="modal">
       <h3 id="modal-title">Are you sure?</h3>
