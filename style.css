@@ -1348,6 +1348,50 @@ textarea::placeholder { color: var(--clr-text-light); }
 .form-sheet::-webkit-scrollbar-track { background: transparent; }
 .form-sheet::-webkit-scrollbar-thumb { background: var(--clr-border); border-radius: 2px; }
 
+/* ── Exercise Toggle Pills ── */
+.exercise-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.ex-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font);
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 5px 10px;
+  border-radius: 100px;
+  border: 1.5px solid var(--clr-border);
+  background: var(--clr-surface-2);
+  color: var(--clr-text-muted);
+  cursor: pointer;
+  min-height: 32px;
+  opacity: 0.42;
+  transition: opacity 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.ex-toggle-btn .ex-toggle-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--ex-color, var(--clr-primary));
+  flex-shrink: 0;
+}
+
+.ex-toggle-btn.active {
+  opacity: 1;
+  border-color: var(--ex-color, var(--clr-primary));
+  color: var(--clr-text);
+}
+
+.ex-toggle-btn:hover {
+  opacity: 0.85;
+}
+
 /* ── Desktop fallback ── */
 @media (min-width: 521px) {
   body { display: flex; justify-content: center; background: #dde8ec; }

@@ -87,6 +87,9 @@ const state = {
   epNapHours:     1,
   // Insights
   insightsDays:   30,
+  // Exercise line visibility (keyed by exercise number)
+  weeklyHiddenExercises:   new Set(),
+  insightsHiddenExercises: new Set(),
   // Shared
   activeSheet:    null,
 };
@@ -663,27 +666,75 @@ function saveWeeklyTab() {
   showModal('Saved', `Weekly scores saved for ${weekLabel(monday)}.`, null, true);
 }
 
+// Build a stable exercise→color map (Exercise N always gets color index N-1 of active list)
+function buildExerciseColorMap(active) {
+  const map = {};
+  active.forEach((n, i) => { map[n] = EXERCISE_COLORS[i % EXERCISE_COLORS.length]; });
+  return map;
+}
+
+// Render clickable toggle pills for each exercise, wired to a hidden Set
+function renderExerciseToggles(containerId, active, colorMap, hiddenSet, onRedraw) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+
+  if (!active.length) { el.innerHTML = ''; return; }
+
+  el.innerHTML = active.map(n => {
+    const isVisible = !hiddenSet.has(n);
+    const color     = colorMap[n] || '#5f9ea8';
+    return `
+      <button class="ex-toggle-btn${isVisible ? ' active' : ''}"
+              data-ex="${n}"
+              style="--ex-color:${color}"
+              type="button"
+              aria-pressed="${isVisible}">
+        <span class="ex-toggle-dot"></span>
+        Ex ${n}
+      </button>
+    `;
+  }).join('');
+
+  el.querySelectorAll('.ex-toggle-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const n = +btn.dataset.ex;
+      hiddenSet.has(n) ? hiddenSet.delete(n) : hiddenSet.add(n);
+      onRedraw();
+    });
+  });
+}
+
 function renderWeeklyTrendChart() {
-  const canvas  = document.getElementById('weekly-trend-chart');
-  const emptyEl = document.getElementById('weekly-chart-empty');
-  const active  = getActiveExercises();
-  const allKeys = getAllWeeklyKeys();
+  const canvas   = document.getElementById('weekly-trend-chart');
+  const emptyEl  = document.getElementById('weekly-chart-empty');
+  const active   = getActiveExercises();
+  const allKeys  = getAllWeeklyKeys();
+  const colorMap = buildExerciseColorMap(active);
 
   if (!canvas || !active.length || allKeys.length < 2) {
     if (emptyEl) emptyEl.style.display = '';
     if (canvas) { const ctx = canvas.getContext('2d'); ctx.clearRect(0,0,canvas.width,canvas.height); }
+    renderExerciseToggles('weekly-exercise-toggles', [], colorMap, state.weeklyHiddenExercises, () => {});
     return;
   }
   if (emptyEl) emptyEl.style.display = 'none';
 
   // Build dataset: { weekKey: { exNum: score } }
   const data = {};
-  allKeys.forEach(wk => {
-    data[wk] = getWeeklyScores(wk);
-  });
+  allKeys.forEach(wk => { data[wk] = getWeeklyScores(wk); });
 
-  drawMultiLineChart(canvas, allKeys, active, data, EXERCISE_COLORS,
+  // Only draw visible exercises, preserving each exercise's stable color
+  const visibleNums   = active.filter(n => !state.weeklyHiddenExercises.has(n));
+  const visibleColors = visibleNums.map(n => colorMap[n]);
+
+  drawMultiLineChart(canvas, allKeys, visibleNums, data, visibleColors,
     n => `Ex ${n}`, 10);
+
+  renderExerciseToggles(
+    'weekly-exercise-toggles', active, colorMap,
+    state.weeklyHiddenExercises,
+    renderWeeklyTrendChart
+  );
 }
 
 // ─────────────────────────────────────────────
@@ -1291,14 +1342,16 @@ function drawComplianceHeatmap(canvas) {
 
 // ── 6. Weekly Exercise Score Trends ─────────
 function renderExerciseTrendsChart() {
-  const canvas  = document.getElementById('exercise-trends-chart');
-  const emptyEl = document.getElementById('exercise-trends-empty');
-  const active  = getActiveExercises();
-  const allKeys = getAllWeeklyKeys();
+  const canvas   = document.getElementById('exercise-trends-chart');
+  const emptyEl  = document.getElementById('exercise-trends-empty');
+  const active   = getActiveExercises();
+  const allKeys  = getAllWeeklyKeys();
+  const colorMap = buildExerciseColorMap(active);
 
   if (!canvas || !active.length || allKeys.length < 2) {
     if (emptyEl) emptyEl.style.display = '';
     if (canvas) { const ctx = canvas.getContext('2d'); ctx.clearRect(0,0,canvas.width,canvas.height); }
+    renderExerciseToggles('insights-exercise-toggles', [], colorMap, state.insightsHiddenExercises, () => {});
     return;
   }
   if (emptyEl) emptyEl.style.display = 'none';
@@ -1306,8 +1359,17 @@ function renderExerciseTrendsChart() {
   const data = {};
   allKeys.forEach(wk => { data[wk] = getWeeklyScores(wk); });
 
-  drawMultiLineChart(canvas, allKeys, active, data, EXERCISE_COLORS,
+  const visibleNums   = active.filter(n => !state.insightsHiddenExercises.has(n));
+  const visibleColors = visibleNums.map(n => colorMap[n]);
+
+  drawMultiLineChart(canvas, allKeys, visibleNums, data, visibleColors,
     n => `Ex ${n}`, 10);
+
+  renderExerciseToggles(
+    'insights-exercise-toggles', active, colorMap,
+    state.insightsHiddenExercises,
+    renderExerciseTrendsChart
+  );
 }
 
 // ─────────────────────────────────────────────
