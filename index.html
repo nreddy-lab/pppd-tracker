@@ -124,15 +124,24 @@
         </div>
 
         <div class="card">
-          <h2 class="section-heading">Dizziness Trend</h2>
+          <h2 class="section-heading">Dizziness Trend (Total per Day)</h2>
+          <p class="body-text">Sum of all episode intensities logged per day</p>
           <div class="chart-wrap">
-            <canvas id="diz-trend-chart" aria-label="Dizziness trend over time"></canvas>
+            <canvas id="diz-trend-chart" aria-label="Total dizziness trend over time"></canvas>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2 class="section-heading">Average Dizziness Trend</h2>
+          <p class="body-text">Average episode intensity per day (scale 1–10)</p>
+          <div class="chart-wrap">
+            <canvas id="avg-diz-trend-chart" aria-label="Average dizziness trend over time"></canvas>
           </div>
         </div>
 
         <div class="card">
           <h2 class="section-heading">Sleep vs Next-Day Dizziness</h2>
-          <p class="body-text">Night sleep hours correlated with next day's average dizziness</p>
+          <p class="body-text">Night sleep hours correlated with next day's total dizziness</p>
           <div class="chart-wrap">
             <canvas id="sleep-diz-chart" aria-label="Sleep hours vs next day dizziness"></canvas>
           </div>
@@ -148,7 +157,7 @@
 
         <div class="card">
           <h2 class="section-heading">Time of Day</h2>
-          <p class="body-text">Average dizziness by time block</p>
+          <p class="body-text">Average dizziness by time block · Morning 6–12h · Afternoon 12–17h · Evening 17–21h · Night 21–6h</p>
           <div class="chart-wrap">
             <canvas id="tod-chart" aria-label="Average dizziness by time of day"></canvas>
           </div>

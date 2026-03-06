@@ -1092,6 +1092,7 @@ function initInsightsTab() {
 
 function renderInsights() {
   renderDizzyTrendChart();
+  renderAvgDizzyTrendChart();
   renderSleepDizChart();
   renderActivityChart();
   renderTodChart();
@@ -1099,12 +1100,41 @@ function renderInsights() {
   renderExerciseTrendsChart();
 }
 
-// ── 1. Dizziness Trend ──────────────────────
+// ── 1. Dizziness Trend (total per day) ──────────────────────
 function renderDizzyTrendChart() {
   const canvas = document.getElementById('diz-trend-chart');
   if (!canvas) return;
   const days = state.insightsDays;
-  const ctx  = canvas.getContext('2d');
+
+  const now   = new Date();
+  const dates = [];
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - i);
+    dates.push(localISO(d));
+  }
+
+  const dayMap = {};
+  getEpisodes().filter(e => e.type === 'dizziness').forEach(e => {
+    if (!dayMap[e.date]) dayMap[e.date] = [];
+    dayMap[e.date].push(e.intensity);
+  });
+
+  const points = dates.map(iso => ({
+    iso,
+    val: dayMap[iso] ? dayMap[iso].reduce((s, v) => s + v, 0) : null,
+  }));
+
+  const maxVal = Math.max(10, ...points.filter(p => p.val !== null).map(p => p.val));
+  const yMax   = Math.ceil(maxVal / 5) * 5;
+  drawLineChart(canvas, points, { yMin: 0, yMax });
+}
+
+// ── 1b. Average Dizziness Trend ──────────────────────────────
+function renderAvgDizzyTrendChart() {
+  const canvas = document.getElementById('avg-diz-trend-chart');
+  if (!canvas) return;
+  const days = state.insightsDays;
 
   const now   = new Date();
   const dates = [];
@@ -1155,12 +1185,14 @@ function renderSleepDizChart() {
     if (dayDizMap[next] && dayDizMap[next].length) {
       logs.push({
         sleepHours: log.sleepHours,
-        dizziness:  r1(mean(dayDizMap[next])),
+        dizziness:  dayDizMap[next].reduce((s, v) => s + v, 0),
       });
     }
   });
 
-  drawScatterChart(canvas, logs);
+  const maxDiz = logs.length ? Math.max(...logs.map(l => l.dizziness)) : 10;
+  const yMax   = Math.max(10, Math.ceil(maxDiz / 5) * 5);
+  drawScatterChart(canvas, logs, { yMin: 0, yMax, yLabel: 'Next-day total dizziness' });
 }
 
 // ── 3. Activity Patterns ────────────────────
@@ -1411,13 +1443,16 @@ function drawLineChart(canvas, points, opts = {}) {
   const toX = i  => P.l + (n > 1 ? (i / (n - 1)) * cW : cW / 2);
   const toY = v  => P.t + cH - ((v - yMin) / (yMax - yMin)) * cH;
 
-  // Gridlines + Y labels
+  // Gridlines + Y labels (dynamic ticks)
+  const gridTicks = yMax <= 10
+    ? [2, 4, 6, 8, 10]
+    : Array.from({ length: 5 }, (_, i) => Math.round((i + 1) * yMax / 5));
   ctx.strokeStyle = '#dce8eb';
   ctx.lineWidth   = 1;
   ctx.font        = '10px -apple-system, sans-serif';
   ctx.fillStyle   = '#9ab4ba';
   ctx.textAlign   = 'right';
-  [2, 4, 6, 8, 10].forEach(v => {
+  gridTicks.forEach(v => {
     const y = toY(v);
     ctx.beginPath(); ctx.moveTo(P.l, y); ctx.lineTo(P.l + cW, y); ctx.stroke();
     ctx.fillText(v, P.l - 5, y + 4);
@@ -1477,7 +1512,7 @@ function drawLineChart(canvas, points, opts = {}) {
 }
 
 // Scatter chart for sleep vs next-day dizziness
-function drawScatterChart(canvas, logs) {
+function drawScatterChart(canvas, logs, opts = {}) {
   const { ctx, W, H } = setupCanvas(canvas);
 
   if (logs.length < 3) {
@@ -1488,18 +1523,27 @@ function drawScatterChart(canvas, logs) {
     return;
   }
 
-  const P = { t: 14, r: 14, b: 36, l: 36 };
-  const cW = W - P.l - P.r;
-  const cH = H - P.t - P.b;
-  const maxH = 12;
+  const P      = { t: 14, r: 14, b: 36, l: 36 };
+  const cW     = W - P.l - P.r;
+  const cH     = H - P.t - P.b;
+  const maxH   = 12;
+  const yMin   = opts.yMin   ?? 1;
+  const yMax   = opts.yMax   ?? 10;
+  const yLabel = opts.yLabel ?? 'Next-day dizziness';
+  const yRange = yMax - yMin;
 
   const toX = h => P.l + (Math.min(h, maxH) / maxH) * cW;
-  const toY = v => P.t + cH - ((v - 1) / 9) * cH;
+  const toY = v => P.t + cH - ((Math.min(v, yMax) - yMin) / yRange) * cH;
+
+  // Dynamic gridlines
+  const gridTicks = yMax <= 10
+    ? [2, 4, 6, 8, 10]
+    : Array.from({ length: 5 }, (_, i) => Math.round((i + 1) * yMax / 5));
 
   ctx.strokeStyle = '#dce8eb'; ctx.lineWidth = 1;
   ctx.font = '10px -apple-system, sans-serif';
   ctx.fillStyle = '#9ab4ba'; ctx.textAlign = 'right';
-  [2, 4, 6, 8, 10].forEach(v => {
+  gridTicks.forEach(v => {
     const y = toY(v);
     ctx.beginPath(); ctx.moveTo(P.l, y); ctx.lineTo(P.l + cW, y); ctx.stroke();
     ctx.fillText(v, P.l - 5, y + 4);
@@ -1510,14 +1554,14 @@ function drawScatterChart(canvas, logs) {
 
   ctx.save(); ctx.translate(11, P.t + cH / 2); ctx.rotate(-Math.PI / 2);
   ctx.font = '10px -apple-system, sans-serif'; ctx.textAlign = 'center';
-  ctx.fillStyle = '#9ab4ba'; ctx.fillText('Next-day dizziness', 0, 0);
+  ctx.fillStyle = '#9ab4ba'; ctx.fillText(yLabel, 0, 0);
   ctx.restore();
 
   logs.forEach(l => {
     ctx.beginPath();
     ctx.arc(toX(l.sleepHours), toY(l.dizziness), 6, 0, Math.PI * 2);
     ctx.globalAlpha  = 0.72;
-    ctx.fillStyle    = dizColor(l.dizziness);
+    ctx.fillStyle    = dizColor(Math.min(10, (l.dizziness / yMax) * 10));
     ctx.fill();
     ctx.globalAlpha  = 1;
     ctx.strokeStyle  = 'rgba(255,255,255,0.8)';
@@ -1537,8 +1581,8 @@ function drawScatterChart(canvas, logs) {
       const m = (n * sxy - sx * sy) / den;
       const b = (sy - m * sx) / n;
       ctx.beginPath();
-      ctx.moveTo(toX(0),    toY(Math.max(1, Math.min(10, b))));
-      ctx.lineTo(toX(maxH), toY(Math.max(1, Math.min(10, m * maxH + b))));
+      ctx.moveTo(toX(0),    toY(Math.max(yMin, Math.min(yMax, b))));
+      ctx.lineTo(toX(maxH), toY(Math.max(yMin, Math.min(yMax, m * maxH + b))));
       ctx.strokeStyle = 'rgba(95,158,168,0.55)';
       ctx.lineWidth   = 1.5;
       ctx.setLineDash([4,4]);
