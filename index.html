@@ -242,6 +242,22 @@
         </div>
 
         <div class="card">
+          <h2 class="section-heading">Backup &amp; Restore</h2>
+          <p class="body-text">Use this to transfer all your data to a new device or PWA install.</p>
+          <div class="export-options">
+            <button id="backup-btn" type="button">
+              <span class="export-icon">&#128190;</span>
+              <div><strong>Backup All Data</strong><span>Save as JSON file</span></div>
+            </button>
+          </div>
+          <div style="margin-top:12px">
+            <label class="body-text" style="display:block;margin-bottom:6px">Restore from backup file:</label>
+            <input type="file" id="restore-file-input" accept=".json" style="font-size:14px;width:100%">
+            <button id="restore-btn" type="button" class="btn-secondary" style="margin-top:8px;width:100%">Restore Data</button>
+          </div>
+        </div>
+
+        <div class="card">
           <h2 class="section-heading">Data Management</h2>
           <p class="body-text">All data is stored privately on this device only.</p>
           <div id="data-stats" class="data-stats"></div>

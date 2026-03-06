@@ -1779,6 +1779,21 @@ function initExport() {
     });
   });
 
+  document.getElementById('backup-btn').addEventListener('click', backupAllData);
+
+  document.getElementById('restore-btn').addEventListener('click', () => {
+    const file = document.getElementById('restore-file-input').files[0];
+    if (!file) {
+      showModal('No File Selected', 'Please choose a backup JSON file first.', null, true);
+      return;
+    }
+    showModal(
+      'Restore Data?',
+      'This will merge the backup into your current data. Existing entries with the same keys will be overwritten. Continue?',
+      () => restoreFromBackup(file)
+    );
+  });
+
   document.getElementById('clear-data-btn').addEventListener('click', () => {
     showModal(
       'Clear All Data?',
@@ -1798,6 +1813,51 @@ function initExport() {
       }
     );
   });
+}
+
+function backupAllData() {
+  const backup = {};
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k && k.startsWith('pppd_')) backup[k] = localStorage.getItem(k);
+  }
+  if (!Object.keys(backup).length) {
+    showModal('Nothing to Backup', 'No data found to back up.', null, true);
+    return;
+  }
+  const json = JSON.stringify(backup, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  const date = new Date().toISOString().slice(0, 10);
+  a.href     = url;
+  a.download = `pppd-backup-${date}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function restoreFromBackup(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const data = JSON.parse(e.target.result);
+      let count = 0;
+      for (const [k, v] of Object.entries(data)) {
+        if (k.startsWith('pppd_')) {
+          localStorage.setItem(k, v);
+          count++;
+        }
+      }
+      document.getElementById('restore-file-input').value = '';
+      renderExportStats();
+      renderDailyCalendar();
+      renderDailyTodaySummary();
+      showModal('Restore Complete', `${count} data entries restored successfully.`, null, true);
+    } catch {
+      showModal('Restore Failed', 'The file could not be read. Make sure it is a valid PPPD backup file.', null, true);
+    }
+  };
+  reader.readAsText(file);
 }
 
 function renderExportStats() {
