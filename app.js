@@ -1185,14 +1185,12 @@ function renderSleepDizChart() {
     if (dayDizMap[next] && dayDizMap[next].length) {
       logs.push({
         sleepHours: log.sleepHours,
-        dizziness:  dayDizMap[next].reduce((s, v) => s + v, 0),
+        dizziness:  r1(mean(dayDizMap[next])),
       });
     }
   });
 
-  const maxDiz = logs.length ? Math.max(...logs.map(l => l.dizziness)) : 10;
-  const yMax   = Math.max(10, Math.ceil(maxDiz / 5) * 5);
-  drawScatterChart(canvas, logs, { yMin: 0, yMax, yLabel: 'Next-day total dizziness' });
+  drawScatterChart(canvas, logs, { yMin: 1, yMax: 10, yLabel: 'Next-day avg dizziness' });
 }
 
 // ── 3. Activity Patterns ────────────────────
