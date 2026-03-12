@@ -203,6 +203,33 @@ function getWeeklyScores(weekKey) {
   catch { return {}; }
 }
 
+// Returns scores only, stripping internal metadata keys (prefixed with _)
+function getWeeklyScoresOnly(weekKey) {
+  const s = getWeeklyScores(weekKey);
+  return Object.fromEntries(Object.entries(s).filter(([k]) => !k.startsWith('_')));
+}
+
+// Returns the exercises stored with a past week's data, or null if not stored
+function getWeeklyExercises(weekKey) {
+  const s = getWeeklyScores(weekKey);
+  return Array.isArray(s._ex) ? s._ex : null;
+}
+
+// All exercise numbers ever tracked across all saved weeks (union)
+function getAllTrackedExercises() {
+  const nums = new Set(getActiveExercises());
+  getAllWeeklyKeys().forEach(wk => {
+    const ex = getWeeklyExercises(wk);
+    if (ex) {
+      ex.forEach(n => nums.add(n));
+    } else {
+      // Legacy week without _ex: include any exercise with a stored score
+      Object.keys(getWeeklyScoresOnly(wk)).forEach(k => nums.add(+k));
+    }
+  });
+  return [...nums].sort((a, b) => a - b);
+}
+
 function saveWeeklyScores(weekKey, scores) {
   localStorage.setItem(getWeeklyKey(weekKey), JSON.stringify(scores));
 }
@@ -607,10 +634,14 @@ function initWeeklyTab() {
 }
 
 function renderWeeklyTab() {
-  const monday   = state.weekMonday;
-  const weekKey  = isoWeekKey(monday);
-  const existing = getWeeklyScores(weekKey);
-  const active   = getActiveExercises();
+  const monday          = state.weekMonday;
+  const weekKey         = isoWeekKey(monday);
+  const existing        = getWeeklyScores(weekKey);
+  const currentWeekKey  = isoWeekKey(getMondayOfWeek(new Date()));
+  const isPastWeek      = weekKey !== currentWeekKey;
+  // For past weeks use the exercises stored with that week; for current week use settings
+  const storedEx        = existing._ex;
+  const active          = (isPastWeek && Array.isArray(storedEx)) ? storedEx : getActiveExercises();
 
   document.getElementById('weekly-week-label').textContent = weekLabel(monday);
 
@@ -661,15 +692,15 @@ function renderWeeklyTab() {
 function saveWeeklyTab() {
   const monday  = state.weekMonday;
   const weekKey = isoWeekKey(monday);
-  saveWeeklyScores(weekKey, state.weeklySliders);
+  saveWeeklyScores(weekKey, { ...state.weeklySliders, _ex: getActiveExercises() });
   renderWeeklyTrendChart();
   showModal('Saved', `Weekly scores saved for ${weekLabel(monday)}.`, null, true);
 }
 
-// Build a stable exercise→color map (Exercise N always gets color index N-1 of active list)
+// Build a stable exercise→color map (Exercise N always gets color index N-1, regardless of active set)
 function buildExerciseColorMap(active) {
   const map = {};
-  active.forEach((n, i) => { map[n] = EXERCISE_COLORS[i % EXERCISE_COLORS.length]; });
+  active.forEach(n => { map[n] = EXERCISE_COLORS[(n - 1) % EXERCISE_COLORS.length]; });
   return map;
 }
 
@@ -707,8 +738,8 @@ function renderExerciseToggles(containerId, active, colorMap, hiddenSet, onRedra
 function renderWeeklyTrendChart() {
   const canvas   = document.getElementById('weekly-trend-chart');
   const emptyEl  = document.getElementById('weekly-chart-empty');
-  const active   = getActiveExercises();
   const allKeys  = getAllWeeklyKeys();
+  const active   = getAllTrackedExercises();
   const colorMap = buildExerciseColorMap(active);
 
   if (!canvas || !active.length || allKeys.length < 2) {
@@ -719,11 +750,11 @@ function renderWeeklyTrendChart() {
   }
   if (emptyEl) emptyEl.style.display = 'none';
 
-  // Build dataset: { weekKey: { exNum: score } }
+  // Build dataset: { weekKey: { exNum: score } } — scores only, no metadata
   const data = {};
-  allKeys.forEach(wk => { data[wk] = getWeeklyScores(wk); });
+  allKeys.forEach(wk => { data[wk] = getWeeklyScoresOnly(wk); });
 
-  // Only draw visible exercises, preserving each exercise's stable color
+  // Only draw visible exercises
   const visibleNums   = active.filter(n => !state.weeklyHiddenExercises.has(n));
   const visibleColors = visibleNums.map(n => colorMap[n]);
 
@@ -1374,8 +1405,8 @@ function drawComplianceHeatmap(canvas) {
 function renderExerciseTrendsChart() {
   const canvas   = document.getElementById('exercise-trends-chart');
   const emptyEl  = document.getElementById('exercise-trends-empty');
-  const active   = getActiveExercises();
   const allKeys  = getAllWeeklyKeys();
+  const active   = getAllTrackedExercises();
   const colorMap = buildExerciseColorMap(active);
 
   if (!canvas || !active.length || allKeys.length < 2) {
@@ -1387,7 +1418,7 @@ function renderExerciseTrendsChart() {
   if (emptyEl) emptyEl.style.display = 'none';
 
   const data = {};
-  allKeys.forEach(wk => { data[wk] = getWeeklyScores(wk); });
+  allKeys.forEach(wk => { data[wk] = getWeeklyScoresOnly(wk); });
 
   const visibleNums   = active.filter(n => !state.insightsHiddenExercises.has(n));
   const visibleColors = visibleNums.map(n => colorMap[n]);
@@ -1958,17 +1989,17 @@ function exportWeeklyCSV() {
     showModal('Nothing to Export', 'No weekly scores logged yet.', null, true);
     return;
   }
-  // Collect all exercise numbers seen
+  // Collect all exercise numbers seen (exclude metadata keys)
   const allNums = new Set();
   keys.forEach(wk => {
-    const scores = getWeeklyScores(wk);
+    const scores = getWeeklyScoresOnly(wk);
     Object.keys(scores).forEach(n => allNums.add(n));
   });
   const numsSorted = [...allNums].map(Number).sort((a,b) => a-b).map(String);
 
   const header = ['Week', ...numsSorted.map(n => `Exercise ${n}`)];
   const rows   = keys.map(wk => {
-    const scores = getWeeklyScores(wk);
+    const scores = getWeeklyScoresOnly(wk);
     return [wk, ...numsSorted.map(n => scores[n] ?? '')];
   });
   const csv = [header, ...rows].map(r => r.join(',')).join('\r\n');
